@@ -31,3 +31,19 @@ d. Comment the information criteria values (AIC, SBC) to select the
 best model.
 4) Validate the model with an in-sample and out-of-sample analysis and do
 a forecast for the next three periods.
+--
+LAX_passenger_prediction_with_Box_Jenkins
+
+**Data** : This is a dataset hosted by the city of Los Angeles. The organization has an open data platform found here and they update their information according the amount of data that is brought in. Explore Los Angeles's Data using Kaggle and all of the data sources available through the city of Los Angeles organization page!
+
+    Update Frequency: This dataset is updated daily.
+
+**Acknowledgements**
+
+This dataset is maintained using Socrata's API and Kaggle's API. Socrata has assisted countless organizations with hosting their open data and has been an integral part of the process of bringing more data to the public. 
+
+**Outline**  : 
+We are going to analyze the data, visualize our data to understand it better.
+After that, we will focus on time series prediction to predict the number of passengers for future dates.
+
+For time series prediction, we will apply Box Jenkins methodology. 
