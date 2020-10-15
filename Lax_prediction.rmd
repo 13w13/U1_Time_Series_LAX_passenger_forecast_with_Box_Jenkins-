@@ -1,0 +1,52 @@
+---
+title: "LAX_passenger_prediction_with_Box_Jenkins"
+author: "Edgar Julien, Antoine Settelen, Simon Weiss"
+date: "2020-10-20"
+output:
+  html_document :
+   keep_md: true
+---
+
+# Navigation {.tabset .tabset-fade .tabset-pills}
+
+Suggested outline : 
+
+
+1. Description of the time series
+
+2. Stationarity: Is your series stationary? Include graphs and tables to justify your analysis (acf, pacf, graph of the series). Explain how you transformed the data in order to reach stationarity (log transformation, differentiation with different orders).
+
+3. Apply Box-Jenkins methodology to build an ARMA process on the stationary data. a. Identify the orders p and q using the ACF and PACF. b. Comment the significance of the coefficients. If necessary, modify the model until all the coefficients are significant. c. Residual diagnostic: check for the normality, the non autocorrelation assumption and the homoscedasticity of the residuals. d. Comment the information criteria values (AIC, SBC) to select the best model.
+
+4. Validate the model with an in-sample and out-of-sample analysis and do a forecast for the next three periods.
+
+## 1. Description of the time series
+
+```{r}
+library(magrittr)
+library(data.table)
+```
+
+### 1.1 Load the data
+```{r}
+Lax_init <- read.csv("data/los-angeles-international-airport-passenger-traffic-by-terminal.csv")
+Lax_init[,2]<-Lax_init[,2] %>% as.Date()
+Lax_init$year<-as.numeric(format(Lax_init[,2],'%Y'))
+Lax_init$months<-months(Lax_init[,2])
+Lax_init %>% setDT
+
+Lax_data=Lax_init[, lapply(.SD, sum, na.rm=TRUE), by=list(year,months),.SDcols=c("Passenger_Count")]
+#verify results
+
+sum(Lax_init[months=="janvier"&year==2006][,6])
+Lax_data[1]
+
+```
+
+```{r}
+traf <- ts(Lax_data[,3], start=c(2006,1), frequency=12)
+plot.ts(traf)
+plot.ts(traf, xlim=(c(2000,2010)))
+```
+
+
