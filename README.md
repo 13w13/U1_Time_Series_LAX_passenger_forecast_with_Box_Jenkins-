@@ -34,17 +34,17 @@ a forecast for the next three periods.
 
 --  
 
-#LAX passenger prediction with Box Jenkins
+## LAX passenger prediction with Box Jenkins
 
 **Data** : This is a dataset hosted by the city of Los Angeles. The organization has an open data platform found here and they update their information according the amount of data that is brought in. Explore Los Angeles's Data using Kaggle and all of the data sources available through the city of Los Angeles organization page!
 
     Update Frequency: This dataset is updated daily.
+![Lax Airport](https://aecom.com/ie/wp-content/uploads/2013/12/AECOM2.18.14-160_ES.tif-797x531.jpg)
 
 **Acknowledgements**
 
 This dataset is maintained using Socrata's API and Kaggle's API. Socrata has assisted countless organizations with hosting their open data and has been an integral part of the process of bringing more data to the public. 
 
-[Lax Airport](https://aecom.com/ie/wp-content/uploads/2013/12/AECOM2.18.14-160_ES.tif-797x531.jpg)
 
 **Outline**  : 
 We are going to analyze the data, visualize our data to understand it better.
