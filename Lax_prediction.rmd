@@ -196,7 +196,6 @@ pvalue
 mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
 mod1
 ```
-```
 
 ### Check p-value 3
 ```{r}
@@ -276,7 +275,7 @@ Box.test(res1,lag=20,type="Ljung-Box")
 ```{r}
 #Normality assumption
 #standardized residuals (residuals divided by the standard deviation)
-res_stand <- res1/sqrt(mod1$sigma2)
+res_stand <- res2/sqrt(mod1$sigma2)
 summary(res_stand)
 #if the normality assumption is satisfied, the standardized residuals should 
 #lie in between -2 and 2 (with 95% of chance)
@@ -350,8 +349,24 @@ We decide to cut at [-3,3]
 
 
 ```{r}
-out1 <- which(res_stand < -3 | res_stand > 3)
+out <- which(res_stand < -3 | res_stand > 3)
+out
+
+#split all outliers into 4 groups to create 4 dummies 
+
+out1 <- out[1]
 out1
+
+out2 <- out[2]
+out2
+
+out3 <- out[3]
+out3
+
+out4 <- out[4]
+out4
+
+
 ```
 
 It corresponds to the observations 35, 65, 100,11 
@@ -369,20 +384,51 @@ res_stand[out1] # value of the outlier.
 
 # Create the dummmies
 ```{r}
+
+#split all outliers into 4 groups to create 4 dummies 
+
+#first dummy
 Lax_data$dum_1 <- 0
 Lax_data$dum_1[out1] <- 1
 
-?arimax
+#unlist(Lax_data$dum_1)
 
-Lax_data %>% as.data.frame
+#second dummy
+Lax_data$dum_2 <- 0
+Lax_data$dum_2[out2] <- 1
 
+#unlist(Lax_data$dum_2)
+
+#third dummy
+Lax_data$dum_3 <- 0
+Lax_data$dum_3[out3] <- 1
+
+#unlist(Lax_data$dum_3)
+
+#fourth dummy
+Lax_data$dum_4 <- 0
+Lax_data$dum_4[out4] <- 1
+
+#unlist(Lax_data$dum_4)
 ```
 
 
 ```{r}
-mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML',xreg=Lax_data$dum_1)
+mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
+              method='ML',xreg=cbind(unlist(Lax_data$dum_1), 
+                                     unlist(Lax_data$dum_2),
+                                     unlist(Lax_data$dum_3),
+                                     unlist(Lax_data$dum_4)
+                                     ))
 mod2
-mod1
+
+#mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
+#              method='ML',xreg=Lax_data$dum_1)
+
+
+mod2$residuals
+
+#mod1
 ```
 
 xreg : additional variable I want to take into account
@@ -407,8 +453,29 @@ plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
 res2<- mod2$residuals
 plot(res2)
 # what we expect is that residuals are close to 0 as possible
+res_stand_2 <- res2/sqrt(mod2$sigma2)
+summary(res_stand_2)
+
 ```
 
+```{r}
+shapiro.test(res2) #check the normality
+```
+
+
+```{r}
+plot(res_stand_2) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+```
+```{r}
+qqnorm(res2)
+qqline(res2)
+```
+
+```{r}
+shapiro.test(res2)
+```
 ```{r}
 
 acf(ts(res2, frequency=1))
@@ -445,8 +512,8 @@ abline(a=-2,b=0,col="red")
 #######
 #QQ-plot
 #######
-qqnorm(res_test_2)
-qqline(res_test)
+qqnorm(res2)
+qqline(res2)
 ```
 
 ```{r}
