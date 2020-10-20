@@ -25,10 +25,15 @@ Suggested outline :
 ```{r}
 library(magrittr)
 library(data.table)
+library(TSA)
 ```
 
 ### 1.1 Load the data
 ```{r}
+#TlseTraf <- read.csv2('TlseAirport2019.csv')
+#View(TlseTraf)
+#traf <- ts(TlseTraf[,3], start=c(1982,1), frequency=12)
+
 Lax_init <- read.csv("data/los-angeles-international-airport-passenger-traffic-by-terminal.csv")
 Lax_init[,2]<-Lax_init[,2] %>% as.Date()
 Lax_init$year<-as.numeric(format(Lax_init[,2],'%Y'))
@@ -45,8 +50,257 @@ Lax_data[1]
 
 ```{r}
 traf <- ts(Lax_data[,3], start=c(2006,1), frequency=12)
-plot.ts(traf)
-plot.ts(traf, xlim=(c(2000,2010)))
+plot.ts(traf) #presence d'un cycle, d'une tendance, et l'amplitude du cycle croit avec le temps
+#plot.ts(traf, xlim=(c(2000,2010)))
+
 ```
+
+```{r}
+acf(ts(traf, frequency=1))
+pacf(ts(traf, frequency=1))
+```
+
+
+```{r}
+#prenons le log 
+ltraf <- log(traf)
+#class(ltraf)
+
+```
+
+```{r}
+plot.ts(ltraf)
+#CSQ : l'amplitude du cycle est devenue stable
+```
+
+
+```{r}
+acf(ts(ltraf, frequency=1))
+#toujours présence de tendance (see acf) et d'une composante saisonniere
+#la tendance semble déterministe, linéaire et non stochastique
+#serie non stationnaire
+pacf(ts(ltraf, frequency=1))
+```
+
+
+```{r}
+#différention la serie une fois 
+dltraf_1 <- diff(ltraf, 1)
+plot(dltraf_1)
+acf(ts(dltraf_1, frequency=1))
+#la composante de la tendance semble avoir disparu, pas la saisonnalité (toujours présente)
+pacf(ts(dltraf_1, frequency=1), lag.max = 60)
+```
+```{r}
+#une regression lineaire de degre 1 semble donc effectivement suffisante 
+#cependant, on ne peut pas utiliser le modele lm1 pour effectuer des previsions
+#car il reste de l'autocorrélation dans les résidus. Affinons le modèle en modélisation les résidus 
+```
+
+```{r}
+#Il faut maintenant étudier la composante saisonniere 
+dltraf_12 <- diff(dltraf_1, 12)
+
+kpss.test(dltraf_12) #stationnary, we accept H0
+
+dltraf_6 <- diff(dltraf_1, 6)
+plot(dltraf_6)
+kpss.test(dltraf_6)
+
+```
+
+
+```{r}
+plot(dltraf_12)
+par(mfrow=c(1,1))
+acf(ts(dltraf_12, frequency=1), lag.max = 40)
+pacf(ts(dltraf_12, frequency=1), lag.max = 40)
+
+#saisonnalité déterministe ou stochastique ??
+```
+## STEP 2 : Indeitification (p,d,q,P,D,Q)
+
+#first estimation 
+q=1 #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)
+p=2 #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)
+d=1 #we removed trend by taking the diff or order 1
+Q=1 #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)
+P=2 #AR because some significant coefficients in the PACF remain at order 12 & at order 24
+D=1 #we removed trend by taking the diff or order 1
+
+```{r}
+?arima
+
+mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(4, 0, 2), period = 6), method='ML')
+mod1
+
+mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(2, 1, 1), period = 12), method='ML')
+mod1
+
+#With method='ML', Error in optim(init[mask], armafn, method = optim.method, hessian = TRUE, : non-finite finite-difference value [1
+```
+
+q=1 #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)
+p=2 #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)
+d=1 #we removed trend by taking the diff or order 1
+Q=1 #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)
+P=1 #AR because some significant coefficients in the PACF remain at order 12 & at order 24
+D=1 #we removed trend by taking the diff or order 1
+
+
+```{r}
+
+#arima
+mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 0, 1), period = 12), method='ML')
+mod1
+```
+
+
+
+```{r}
+fit1 <- fitted(mod1)
+plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
+```
+#graphiquement, c'est pas mal 
+#attendons la suite pour une comparaison des modèles à travers l'AIC
+
+```{r}
+mod1$coef
+mod1$var.coef
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue 
+
+# pvalue<5% for sma1. The coefficients associated to the ma are significant 
+# the coefficients associated for AR (ar1, ar2 and sar1) et MA (ma1) are not significant because pvalue>5% for them
+# we need to remove them, re-estimate the model without them to accurate the model
+```
+```{r}
+mod1 <- arima(ts(ltraf, frequency=1), c(2, 1, 0),seasonal = list(order = c(1, 0, 1), period = 12), method='ML')
+mod1
+```
+
+```{r}
+fit1 <- fitted(mod1)
+plot.ts(cbind(ts(ltraf, frequency=1),fit1),plot.type='single',col=c('black','red'))
+```
+```{r}
+mod1$coef
+mod1$var.coef
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue 
+```
+
+
+```{r}
+mod1 <- arima(ts(ltraf, frequency=1), c(2, 1, 0),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
+mod1
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue 
+```
+```{r}
+## Residuals analysis ## 
+#difference between fit data and raw data
+#every time there is a pic explain that the model has not fitted well the data
+res1 <- mod1$residuals
+plot(res1)
+# what we expect is that residuals are close to 0 as possible
+```
+```{r}
+#we want to check the white noise assumption and the normality of the residuals (gaussian WN)
+# Autocorrelation of the residuals (White noise assumption) 
+acf(ts(res1, frequency=1))
+#what we expect is that all the coefficients are none significant, that is the deal with white noise
+
+#it is not perfect but what would be like an issue if the first or the second autocorellation coefficient 
+#would have been significant
+#here, 2 significant coefficients at lags 5 and 6
+```
+```{r}
+pacf(ts(res1, frequency=1))
+#same as before
+#what i expect is that all the coefficients are none significant, that is the deal with white noise
+#it is not perfect but what would be like an issue if the first or the second autocorellation coefficient 
+#would have been significant
+#here, 2 significant coefficients at lags 1,2, 4
+```
+```{r}
+# Ljung-box test to check for the significance of ACF
+Box.test(res1,lag=20,type="Ljung-Box")
+#pvalue = 8% larger than 5% so we accept H0: white noise assumption
+```
+```{r}
+#Normality assumption
+#standardized residuals (residuals divided by the standard deviation)
+res_stand <- res1/sqrt(mod1$sigma2)
+summary(res_stand)
+#if the normality assumption is satisfied, the standardized residuals should 
+#lie in between -2 and 2 (with 95% of chance)
+```
+```{r}
+plot(res_stand) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+#it should be 95% of chance but here obviously there is a big gap before 1990 (adding a dummy variable 
+#to fit it)
+#we can identify one outlier in the dataset
+#it corresponds to the lowest value of the residuals
+```
+```{r}
+#######
+#QQ-plot
+#######
+qqnorm(res1)
+qqline(res1)
+```
+
+```{r}
+#######
+#Shapiro-test
+#######
+shapiro.test(res1)
+# pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal)
+
+library(tseries)
+jarque.bera.test(res1)
+
+```
+```{r}
+#constance variance
+#with a plot
+#if the variance is constant, the variance should not depend on the difference of the date
+# Homoscedaticity 
+sq.res <- (res1)^2
+acf(ts(sq.res,frequency=1))
+
+```
+
+
+
+
+
+
+
+
+
+
 
 
