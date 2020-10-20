@@ -25,6 +25,7 @@ Suggested outline :
 ```{r}
 library(magrittr)
 library(data.table)
+library(forecast)
 library(TSA)
 ```
 
@@ -142,7 +143,7 @@ fit1 <- fitted(mod1)
 plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 ```
 #graphiquement, c'est pas mal 
-#attendons la suite pour une comparaison des modèles à travers l'AIC
+#attendons la suite pour une comparaison des mod?les ? travers l'AIC
 
 ```{r}
 mod1$coef
@@ -228,10 +229,10 @@ plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 
 
 ```{r}
-modtest$coef
-modtest$var.coef
+mod1$coef
+mod1$var.coef
 
-tstat <- modtest$coef/sqrt(diag(modtest$var.coef))
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
 tstat 
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
@@ -245,7 +246,7 @@ Let go to the residuals analysis
 ## Residuals analysis ## 
 #difference between fit data and raw data
 #every time there is a pic explain that the model has not fitted well the data
-res1<- modtest$residuals
+res1<- mod1$residuals
 plot(res1)
 # what we expect is that residuals are close to 0 as possible
 ```
