@@ -218,7 +218,7 @@ OK
 We check with auto arima final coef 
 #Test auto.arima
 ```{r}
-auto.arima(ltraf,stationary =FALSE, seasonal = TRUE)
+auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
 mod1<- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
 mod1
 fit1 <- fitted(mod1)
@@ -246,15 +246,15 @@ Let go to the residuals analysis
 ## Residuals analysis ## 
 #difference between fit data and raw data
 #every time there is a pic explain that the model has not fitted well the data
-res1<- mod1$residuals
-plot(res1)
+res2<- mod1$residuals
+plot(res2)
 # what we expect is that residuals are close to 0 as possible
 ```
 
 ```{r}
 #we want to check the white noise assumption and the normality of the residuals (gaussian WN)
 # Autocorrelation of the residuals (White noise assumption) 
-acf(ts(res1, frequency=1))
+acf(ts(res2, frequency=1))
 #what we expect is that all the coefficients are none significant, that is the deal with white noise
 #All coefficient are none significant
 ```
@@ -320,8 +320,154 @@ acf(ts(sq.res,frequency=1),lag.max = 60)
 
 
 
+```{r}
+#library(TSA)
+Htest <- McLeod.Li.test(mod2, plot=FALSE)
+Htest
+```
 
 
+### Dummy Variable
+SARIMAX 
+
+#Identify dummies
+
+```{r}
+plot(res_stand) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+```
+We can identify outliers in our dataset
+2009 : 1 min , 2011 : 1 max , 2014 : 1 min and max
+
+
+
+```{r}
+min(res_stand)
+max(res_stand)
+```
+We decide to cut at [-3,3]
+
+
+```{r}
+out1 <- which(res_stand < -3 | res_stand > 3)
+out1
+```
+
+It corresponds to the observations 35, 65, 100,11 
+
+With the zoo package we associate with this observation the date. 
+```{r}
+library(zoo)
+```
+
+```{r}
+index(res_stand)[out1] #date of the outliers novembre 2008, Mai 2011, Mars 2014, Avril 2014 
+res_stand[out1] # value of the outlier. 
+```
+
+
+# Create the dummmies
+```{r}
+Lax_data$dum_1 <- 0
+Lax_data$dum_1[out1] <- 1
+
+?arimax
+
+Lax_data %>% as.data.frame
+
+```
+
+
+```{r}
+mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML',xreg=Lax_data$dum_1)
+mod2
+mod1
+```
+
+xreg : additional variable I want to take into account
+
+By adding xreg, we will be able to control the misfit at the years written below. We have even gain small AIC ! 
+
+
+Plot of the fitted value...
+```{r}
+fit2 <- fitted(mod2)
+
+
+plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
+```
+
+
+### Residuals analysis
+
+
+
+```{r}
+res2<- mod2$residuals
+plot(res2)
+# what we expect is that residuals are close to 0 as possible
+```
+
+```{r}
+
+acf(ts(res2, frequency=1))
+pacf(ts(res2, frequency=1),lag.max = 60)
+
+```
+
+
+```{r}
+# Ljung-box test to check for the significance of ACF
+Box.test(res2,lag=20,type="Ljung-Box")
+#pvalue = 59% larger than 5% so we accept H0: white noise assumption
+```
+```{r}
+#Normality assumption
+#standardized residuals (residuals divided by the standard deviation)
+res_stand_2 <- res2/sqrt(mod2$sigma2)
+summary(res_stand_2)
+#if the normality assumption is satisfied, the standardized residuals should 
+#lie in between -2 and 2 (with 95% of chance)
+```
+```{r}
+plot(res_stand_2) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+
+
+#it should be 95% of chance but here obviously there is a big gap before 1990 (adding a dummy variable 
+#to fit it)
+#we can identify one outlier in the dataset
+#it corresponds to the lowest value of the residuals
+```
+```{r}
+#######
+#QQ-plot
+#######
+qqnorm(res_test_2)
+qqline(res_test)
+```
+
+```{r}
+#######
+#Shapiro-test
+#######
+shapiro.test(res2)
+# pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal)
+library(tseries)
+jarque.bera.test(res2)
+
+```
+```{r}
+#constance variance
+#with a plot
+#if the variance is constant, the variance should not depend on the difference of the date
+# Homoscedaticity 
+sq.res <- (res2)^2
+acf(ts(sq.res,frequency=1),lag.max = 60)
+
+```
 
 
 
