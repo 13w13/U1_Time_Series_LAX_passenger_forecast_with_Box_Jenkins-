@@ -120,8 +120,103 @@ pacf(ts(dltraf_12, frequency=1), lag.max = 40)
 ```
 ## STEP 2 : Indeitification (p,d,q,P,D,Q)
 
+#first estimation 
+q=1 #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)
+p=2 #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)
+d=1 #we removed trend by taking the diff or order 1
+Q=1 #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)
+P=2 #AR because some significant coefficients in the PACF remain at order 12 & at order 24
+D=1 #we removed trend by taking the diff or order 1
+
 ```{r}
+mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+mod1
+```
+
+
+
+
+
+```{r}
+fit1 <- fitted(mod1)
+plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
+```
+#graphiquement, c'est pas mal 
+#attendons la suite pour une comparaison des modèles à travers l'AIC
+
+```{r}
+mod1$coef
+mod1$var.coef
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue 
+
+# pvalue<5% for sma1. The coefficients assoc
+
+```
+
+
+### Remove ar1
+```{r}
+mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+mod1
+```
+
+### Check p-value 2
+
+```{r}
+mod1$coef
+mod1$var.coef
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue 
+
+# pvalue<5% for sma1. The coefficients assoc
+
+```
+
+
+
+
+
+### Remove sar1
+
+```{r}
+mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
+mod1
+```
+```
+
+### Check p-value 3
+```{r}
+mod1$coef
+mod1$var.coef
+```
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue
+```
+
+OK
+
+We check with auto arima final coef 
 #Test auto.arima
+```{r}
 auto.arima(ltraf,stationary =FALSE, seasonal = TRUE)
 mod1<- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
 mod1
@@ -141,6 +236,11 @@ tstat
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
 ```
+
+
+Ok we have the same coef
+Let go to the residuals analysis
+
 ```{r}
 ## Residuals analysis ## 
 #difference between fit data and raw data
@@ -216,7 +316,6 @@ sq.res <- (res1)^2
 acf(ts(sq.res,frequency=1),lag.max = 60)
 
 ```
-
 
 
 
