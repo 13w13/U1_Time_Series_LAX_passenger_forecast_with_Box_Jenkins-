@@ -446,7 +446,26 @@ pacf(ts(res2, frequency=1),lag.max = 60)
 Box.test(res2,lag=20,type="Ljung-Box")
 #pvalue = 59% larger than 5% so we accept H0: white noise assumption
 ```
+# Step4: Prediction
+# Quality of the fit
+```{r}
+cb80 <- mod2$sigma2^.5*qnorm(0.9)
+plot(cbind(ltraf,fit2-cb80,fit2+cb80),plot.type='single',lty=c(1,2,2))
+```
+```{r}
+indi <- (ltraf-(fit2-cb80))>0&(fit2+cb80-ltraf)>0
+prop <- 100*sum(indi)/length(indi)
+prop
+```
+# Prediction 
+```{r}
 
+pred <- predict(mod1, n.ahead = 12)
+ts.plot(traf,2.718^pred$pred, log = "y", lty = c(1,3))
+time(traf)
+
+
+```
 
 
 
