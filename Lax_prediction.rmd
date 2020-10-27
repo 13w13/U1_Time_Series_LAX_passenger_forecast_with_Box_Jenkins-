@@ -26,6 +26,7 @@ Suggested outline :
 library(magrittr)
 library(data.table)
 library(forecast)
+library(tseries)
 library(TSA)
 ```
 
@@ -47,6 +48,8 @@ Lax_data=Lax_init[, lapply(.SD, sum, na.rm=TRUE), by=list(year,months),.SDcols=c
 sum(Lax_init[months=="janvier"&year==2006][,6])
 Lax_data[1]
 
+Lax_data %>% View
+
 ```
 
 ```{r}
@@ -61,74 +64,74 @@ acf(ts(traf, frequency=1))
 pacf(ts(traf, frequency=1))
 ```
 
-
-#We perform a logarithmic transformation
+#Logarithm transformation
+We perform a logarithmic transformation to remove the cycle amplification
 ```{r}
 ltraf <- log(traf)
 ```
-#CSQ: the range of the cycle has become stable
+CSQ: the range of the cycle has become stable
 ```{r}
 plot.ts(ltraf)
 ```
 
-#Still the presence of a trend and a seasonal component
-#This trend seems to be deterministic, linear and non-stochastic
-#The serie is non-stationary series
+Still a presence of a trend and a seasonal component
+This trend seems to be deterministic, linear and non-stochastic (but we will use a sotchastic modelisation for the trend using integration
+within ARIMA)
+The serie is always a non-stationary series 
 ```{r}
 acf(ts(ltraf, frequency=1))
 pacf(ts(ltraf, frequency=1))
 ```
-
 #1st order diff: remove the trend
 ```{r}
 dltraf_1 <- diff(ltraf, 1)
 plot(dltraf_1)
 acf(ts(dltraf_1, frequency=1))
 ```
-#the trend component seems to have disappeared, not the seasonality
+the trend component seems to have disappeared, not the seasonality
 ```{r}
 pacf(ts(dltraf_1, frequency=1), lag.max = 60)
 ```
 
-#A linear regression of degree 1 seems to be sufficient. 
-#However, the lm1 model cannot be used to make predictions.
-#Because there is still self-correction in the residues. Let's refine the model by modeling the residues 
+A linear regression of degree 1 seems to be sufficient.
+However, the lm1 model cannot be used to make predictions.
+Because there is still self-correction in the residuals. Let's refine the model by modeling the residuals.
+
+We will use a stochastic modelisation for the trend using integration within ARIMA
 #Now we need to look at the seasonal component 
 
 ```{r}
 dltraf_12 <- diff(dltraf_1, 12)
-kpss.test(dltraf_12) #stationnary, we accept H0
-dltraf_6 <- diff(dltraf_1, 6)
-plot(dltraf_6)
-kpss.test(dltraf_6)
+library(tseries)
+kpss.test(dltraf_12) #stationnary, we accept H0 and we choose as seasonality s=12
+
+
+#dltraf_6 <- diff(dltraf_1, 6)
+#plot(dltraf_6)
+#kpss.test(dltraf_6)
 
 ```
-
-
+#now we have found a series which is stationary. We can move the identification step
 ```{r}
 plot(dltraf_12)
 par(mfrow=c(1,1))
 acf(ts(dltraf_12, frequency=1), lag.max = 40)
 pacf(ts(dltraf_12, frequency=1), lag.max = 40)
 ```
-## STEP 2 : Indeitification (p,d,q,P,D,Q)
+## STEP 2 : Identification (p,d,q,P,D,Q)
 
 #first estimation 
 q=1 #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)
 p=2 #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)
 d=1 #we removed trend by taking the diff or order 1
 Q=1 #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)
-P=2 #AR because some significant coefficients in the PACF remain at order 12 & at order 24
-D=1 #we removed trend by taking the diff or order 1
+P=2 #AR because some significant coefficients in the PACF remain at order 12 & at order 24 
+D=1 #(seasonality diff) we removed seasonality diff by taking the diff or order 1
 
 ```{r}
 mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
 ```
-
-
-
-
 
 ```{r}
 fit1 <- fitted(mod1)
@@ -147,12 +150,14 @@ tstat
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue 
 
-# pvalue<5% for sma1. The coefficients assoc
+# pvalue<5% for sma1.
+# fortunately pvalue<5% for sma1. The coefficients associated to the sma1 is significant 
+# the coefficients associated to the other coefficients are not significant because pvalue>5% for them
 
+# we need to remove them, re-estimate the model without them to accurate the model
 ```
+###  First, we choose to remove ar1 & ar2 
 
-
-### Remove ar1
 ```{r}
 mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
@@ -197,7 +202,7 @@ tstat
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
 ```
-#We check with auto arima final coefficient 
+We check with auto arima final coefficient 
 #Test auto.arima
 ```{r}
 auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
@@ -206,10 +211,6 @@ mod1
 fit1 <- fitted(mod1)
 plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 ```
-
-
-
-
 ```{r}
 mod1$coef
 mod1$var.coef
@@ -219,55 +220,67 @@ tstat
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
 ```
-#We have the same coef
-#We follow to the residuals analysis
+We have the same coef
+We follow to the residuals analysis
 
 ## Residuals analysis ## 
-#Difference between fit data and raw data
-#every time there is a pic explain that the model has not fitted well the data
+Difference between fit data and raw data
+every time there is a pic explain that the model has not fitted well the data
 
 ```{r}
 res1<- mod1$residuals
 plot(res1)
 ```
-# It is what we expect is that residuals are close to 0 as possible
-# We want to check the white noise assumption and the normality of the residuals (gaussian WN)
-# Autocorrelation of the residuals (White noise assumption) 
+What we expect is that residuals are close to 0 as possible
+We want to check the white noise assumption and the normality of the residuals (gaussian WN)
 
+
+#1. White noise assumption
+Autocorrelation of the residuals (White noise assumption) 
 ```{r}
 acf(ts(res1, frequency=1))
 ```
-#what we expect is that all the coefficients are none significant, that is the deal with white noise
-#All coefficient are none significant
+what we expect is that all the coefficients are none significant, that is the deal with white noise
+All coefficient seem to be none significant
 
 ```{r}
 pacf(ts(res1, frequency=1),lag.max = 60)
 ```
-
+what i expect is that all the coefficients are none significant, that is the deal with white noise
+it is not perfect but what would be like an issue if the first or the second autocorellation coefficient 
+would have been significant
+here, 1 significant coefficient at lag 4 
 
 # Ljung-box test to check for the significance of ACF
 ```{r}
 Box.test(res1,lag=20,type="Ljung-Box")
 ```
-#pvalue = 59% larger than 5% so we accept H0: white noise assumption
+pvalue = 59% larger than 5% so we accept H0: white noise assumption
+CCL => We have a white noise
 
-#Normality assumption
-#standardized residuals (residuals divided by the standard deviation)
+
+#2. Normality assumption
+
+Normality assumption
+standardized residuals (residuals divided by the standard deviation)
 ```{r}
 res_stand <- res1/sqrt(mod1$sigma2)
 summary(res_stand)
 ```
-#if the normality assumption is satisfied, the standardized residuals should 
-#lie in between -2 and 2 (with 95% of chance)
+if the normality assumption is satisfied, the standardized residuals should 
+lie in between -2 and 2 (with 95% of chance)
+
 ```{r}
 plot(res_stand) 
 abline(a=2,b=0,col="red")
 abline(a=-2,b=0,col="red")
 ```
-#It should be 95% of chance but here obviously there is a big gap before 1990 
-#(adding a dummy variableto fit it)
-#We can identify one outlier in the dataset
-#it corresponds to the lowest value of the residuals
+It should be 95% of chance but here obviously there are some pics around 2007, 2009, 2011, 2014 
+(we need to add dummy variables to fit them)
+We can identify outliers in the dataset
+it corresponds to the lowest values of the residuals
+
+but, before doing that, we need to check if it is necessary by testing the normality of the residuals
 
 #######
 #QQ-plot
@@ -281,26 +294,29 @@ qqline(res1)
 #######
 #Shapiro-test
 #######
-shapiro.test(1)
+shapiro.test(res1)
 library(tseries)
 jarque.bera.test(res1)
 ```
-# pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal)
-#constance variance
-#with a plot
-#if the variance is constant, the variance should not depend on the difference of the date
-# Homoscedaticity 
+pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal)
+We need to add a dummy in the model (second option)
+
+
+
+constance variance
+with a plot
+if the variance is constant, the variance should not depend on the difference of the date
+(should not depend on t)
+# Homoscedaticity or heteroscedaticity here ? 
 ```{r}
 sq.res1 <- (res1)^2
 acf(ts(sq.res1,frequency=1),lag.max = 60)
 ```
-
 ```{r}
 #library(TSA)
 Htest <- McLeod.Li.test(mod1, plot=FALSE)
 Htest
 ```
-
 
 ### Dummy Variable
 SARIMAX 
@@ -314,8 +330,6 @@ abline(a=-2,b=0,col="red")
 ```
 We can identify outliers in our dataset
 2009 : 1 min , 2011 : 1 max , 2014 : 1 min and max
-
-
 
 ```{r}
 min(res_stand)
@@ -364,6 +378,8 @@ res_stand[out1] # value of the outlier.
 Lax_data$dum_1 <- 0
 Lax_data$dum_1[out1] <- 1
 
+length(Lax_data$dum_1)
+
 #second dummy
 Lax_data$dum_2 <- 0
 Lax_data$dum_2[out2] <- 1
@@ -386,6 +402,12 @@ mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12)
                                      unlist(Lax_data$dum_3),
                                      unlist(Lax_data$dum_4)
                                      ))
+
+ncol(cbind(unlist(Lax_data$dum_1), unlist(Lax_data$dum_2), unlist(Lax_data$dum_3), unlist(Lax_data$dum_4)))
+
+#mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
+#              method='ML', xreg=unlist(Lax_data$dum_1))
+
 mod2
 mod2$residuals
 ```
@@ -400,8 +422,6 @@ Plot of the fitted value...
 fit2 <- fitted(mod2)
 plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
 ```
-
-
 ### Residuals analysis
 
 ```{r}
@@ -414,12 +434,6 @@ res_stand_2 <- res2/sqrt(mod2$sigma2)
 summary(res_stand_2)
 
 ```
-
-```{r}
-shapiro.test(res2) #check the normality
-```
-
-
 ```{r}
 plot(res_stand_2) 
 abline(a=2,b=0,col="red")
@@ -432,35 +446,74 @@ qqline(res2)
 
 ```{r}
 shapiro.test(res2)
+jarque.bera.test(res2)
 ```
-```{r}
-
-acf(ts(res2, frequency=1))
-pacf(ts(res2, frequency=1),lag.max = 60)
-
-```
-
+with our dummies, now the residuals follow a normal distribution.
+It is always a white noise ? 
 
 ```{r}
 # Ljung-box test to check for the significance of ACF
 Box.test(res2,lag=20,type="Ljung-Box")
 #pvalue = 59% larger than 5% so we accept H0: white noise assumption
 ```
+CCL => We have a gaussian white noise now. 
+
+
+#Recheck for Heteroscedasticity 
+
+```{r}
+
+acf(ts(res2, frequency=1))
+pacf(ts(res2, frequency=1),lag.max = 60)
+
+```
+No, it seems that there is no more significant coefficients which would say that we have homoscedaticity (don't need to use garch model)
+
+# McLeod.Li.test
+```{r}
+Htest <- McLeod.Li.test(mod2, plot=FALSE)
+Htest
+```
+H0 is always accepted : homoscedaticity here ! 
+
 # Step4: Prediction
-# Quality of the fit
+Quality of the fit
 ```{r}
 cb80 <- mod2$sigma2^.5*qnorm(0.9)
 plot(cbind(ltraf,fit2-cb80,fit2+cb80),plot.type='single',lty=c(1,2,2))
 ```
+
+# Proportion of points in the confidence bound
 ```{r}
 indi <- (ltraf-(fit2-cb80))>0&(fit2+cb80-ltraf)>0
 prop <- 100*sum(indi)/length(indi)
 prop
 ```
+Here, the prop >80%, then the fit is considered good.
+
 # Prediction 
 ```{r}
+?predict
 
-pred <- predict(mod1, n.ahead = 12)
+trick <- matrix(rep(0, 12), ncol=4)
+
+length(trick)
+
+mod2
+
+pred <- predict(mod2, n.ahead = 12, newxreg = trick)
+
+#For forecasting you need to supply new values of your regressor, which apparently you do not.
+#newxreg should be a matrix that contains values of the regressors that you want predictions for. 
+#So in my case, my regressors were all 1 or 0 (coded variables) to specify a particular month. So what I did is I created a matrix of 0's and 1's to be used as my newxreg. What I did is I defined a matrix mx, and then in the predict function I set newxreg=mx. I made sure that the number of rows of mx>= number of rows of n.ahead.
+
+ts.plot(traf,2.718^pred$pred, log = "y", lty = c(1,3))
+time(traf)
+ts.plot(traf,xlim=c(2010,2020.500))
+lines(2.718^(pred$pred), col="red")
+lines(2.718^(pred$pred-1.96*pred$se),col=4,lty=2)
+lines(2.718^(pred$pred+1.96*pred$se),col=4,lty=2)
+
 ts.plot(traf,2.718^pred$pred, log = "y", lty = c(1,3))
 time(traf)
 
