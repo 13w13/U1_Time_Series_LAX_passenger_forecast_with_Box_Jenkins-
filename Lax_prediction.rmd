@@ -8,19 +8,33 @@ output:
 ---
 
 # Navigation {.tabset .tabset-fade .tabset-pills}
+## 0. Presentation of the project
 
-Suggested outline : 
+**Data** : For this project, we used a dataset hosted by the city of Los Angeles. The organization has an open data platform and they update their information according the amount of data that is brought in. We found the dataset trough an open dataset in Kaggle website : 
+https://www.kaggle.com/cityofLA/los-angeles-international-airport-data.   
+
+We download the data and upload it in our working github repo for more convinency. 
+The dataset has on ly 3 notebook written in Python and only one notebook has implemneted a prediction using SARIMA model.   
+
+Thus, it seemed relevant to us to write this script in R by applying the Box Jenkins method in order to make predictions on this dataset using the methods seen during the Time Series by Anne Valhems. 
+If this script doesn't contain a lot of errors, we hope to be able to publish it on the platform. Enjoy reading! 
 
 
-1. Description of the time series
+Update Frequency: This dataset is updated daily.
 
-2. Stationarity: Is your series stationary? Include graphs and tables to justify your analysis (acf, pacf, graph of the series). Explain how you transformed the data in order to reach stationarity (log transformation, differentiation with different orders).
+![Lax Airport](https://aecom.com/ie/wp-content/uploads/2013/12/AECOM2.18.14-160_ES.tif-797x531.jpg)
 
-3. Apply Box-Jenkins methodology to build an ARMA process on the stationary data. a. Identify the orders p and q using the ACF and PACF. b. Comment the significance of the coefficients. If necessary, modify the model until all the coefficients are significant. c. Residual diagnostic: check for the normality, the non autocorrelation assumption and the homoscedasticity of the residuals. d. Comment the information criteria values (AIC, SBC) to select the best model.
 
-4. Validate the model with an in-sample and out-of-sample analysis and do a forecast for the next three periods.
 
-## 1. Description of the time series
+**Outline**  : 
+After loading the data, we are going to analyze the data, visualize our data to understand it better. (Chapter 1) Then, we will focus on the sationary analysis by including graphds and tables to justify our analysis. We will transforme the data in order to reach stationarity.(Chapter 2)
+The stationarity reached, we will then apply Box-Jenkins methodology to build an ARMA process on the modified data and select the best model (Chapter 3). 
+After that, we will focus validate the model with an in-sample and out of sample analysis and do prediction to predict the number of passengers for future dates.
+
+
+## 1. Description of the time series and data preparation
+
+### 1.0 Load the libraries
 
 ```{r}
 library(magrittr)
@@ -32,38 +46,104 @@ library(TSA)
 
 ### 1.1 Load the data
 ```{r}
-#TlseTraf <- read.csv2('TlseAirport2019.csv')
-#View(TlseTraf)
-#traf <- ts(TlseTraf[,3], start=c(1982,1), frequency=12)
-
 Lax_init <- read.csv("data/los-angeles-international-airport-passenger-traffic-by-terminal.csv")
+Lax_init %>% head
+Lax_init %>% str
+```
+As mentioned below, we load the data from our github repo. 
+The row data we have loaded contains 5870 observation for the 8 following features:
+ * DataExtractDate	
+ * ReportPeriod	
+ * Terminal	
+ * Arrival_Departure	
+ * Domestic_International	
+ * Passenger_Count
+ * year
+ * months
+
+We  check if there is null value
+```{r}
+Lax_init %>% anyNA
+```
+We don't have NA value. 
+
+
+### 1.2 Data preparation
+In order to use ts package in R, we have to do some Data preparation.   
+Since we want to predict the **number of passenger** with our model, we will only keep the feature Passenger Count and Report Period associated to each observation.   
+
+So first we convert the Report Perdiod feature into a Date type. 
+```{r}
 Lax_init[,2]<-Lax_init[,2] %>% as.Date()
+```
+Then we create 2 new column for the year and the month from this Report Period and convert the initial dataset into a Data table. 
+```{r}
 Lax_init$year<-as.numeric(format(Lax_init[,2],'%Y'))
 Lax_init$months<-months(Lax_init[,2])
 Lax_init %>% setDT
+```
 
+We create a new Lax dataset with only the data we are interessted in for the prediction. 
+```{r}
 Lax_data=Lax_init[, lapply(.SD, sum, na.rm=TRUE), by=list(year,months),.SDcols=c("Passenger_Count")]
-#verify results
+```
 
+We verify that the data of our transformation fit well with the original data.
+
+```{r}
 sum(Lax_init[months=="janvier"&year==2006][,6])
 Lax_data[1]
+```
+It the same ! We can pass to load our data our ts package and do our first plot.
 
-Lax_data %>% View
-
+### 1.3 Load into ts model
+```{r}
+traf <- ts(Lax_data[,3], start=c(2006,1), frequency=12)
+str(traf)
 ```
 
 ```{r}
-traf <- ts(Lax_data[,3], start=c(2006,1), frequency=12)
-plot.ts(traf) #presence d'un cycle, d'une tendance, et l'amplitude du cycle croit avec le temps
-#plot.ts(traf, xlim=(c(2000,2010)))
-
+start(traf)
+end(traf)
+frequency(traf)
 ```
+Our time series data strats at date 2006 january and ends at date 2019 mars. It's frequency is monthly. 
+
+
+
+### 1.4 First plot  : Passenger traffic at LAX airport
+```{r, warning=FALSE,error=FALSE}
+plot.ts(traf,xlab="date (monthly)", ylab="passenger traffic",main="Passenger traffic at LAX airport")
+```
+From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, multiplicative seasonal patterns, and some irregular patterns. This plot suggests to use what we cal a SARIMA model to do our forecasting.
+Let's deepn our visual analysis with the decompisation of the time serie into trend, seasonality and random component. 
+
+
+### 1. 5 Decomposition in trend, seasonality and random component
+```{r}
+x <- decompose(traf)
+plot(x)
+```
+We find the same conlusion from visual observation of time series, i.e a mainly positive linar trend over time, a seasonal patterns with some irregular patterns in the random component (variation with Time and this variance was not captured by Sesonality nor the trend)
+
+```{r}
+# Visualization of the frequency
+?monthplot
+monthplot(traffic.ts)
+```
+```
+
+
+## 2. Stationarity ? 
+
+
+Let's check the auto and partial autocorrelation function (ACF and PACF) of our raw data in order to confirm  what we have observed from our first plot. 
 
 ```{r}
 acf(ts(traf, frequency=1))
 pacf(ts(traf, frequency=1))
 ```
-
+From the ACF, we can 
 #Logarithm transformation
 We perform a logarithmic transformation to remove the cycle amplification
 ```{r}
@@ -88,7 +168,7 @@ dltraf_1 <- diff(ltraf, 1)
 plot(dltraf_1)
 acf(ts(dltraf_1, frequency=1))
 ```
-the trend component seems to have disappeared, not the seasonality
+the trend component seems to have disappeared, not the seasonality at t=12
 ```{r}
 pacf(ts(dltraf_1, frequency=1), lag.max = 60)
 ```
@@ -202,7 +282,8 @@ tstat
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
 ```
-We check with auto arima final coefficient 
+We check with auto arima our final coefficient. 
+The auto.arima function will provide us the best model. 
 #Test auto.arima
 ```{r}
 auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
@@ -283,7 +364,11 @@ it corresponds to the lowest values of the residuals
 but, before doing that, we need to check if it is necessary by testing the normality of the residuals
 
 #######
-#QQ-plot
+
+# 3. Normality assumption
+
+
+QQ-plot
 #######
 ```{r}
 qqnorm(res1)
@@ -307,7 +392,7 @@ constance variance
 with a plot
 if the variance is constant, the variance should not depend on the difference of the date
 (should not depend on t)
-# Homoscedaticity or heteroscedaticity here ? 
+## 4. Homoscedaticity or heteroscedaticity here ? 
 ```{r}
 sq.res1 <- (res1)^2
 acf(ts(sq.res1,frequency=1),lag.max = 60)
