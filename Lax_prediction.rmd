@@ -115,7 +115,7 @@ Our time series data strats at date 2006 january and ends at date 2019 mars. It'
 ```{r, warning=FALSE,error=FALSE}
 plot.ts(traf,xlab="date (monthly)", ylab="passenger traffic",main="Passenger traffic at LAX airport")
 ```
-From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, multiplicative seasonal patterns, and some irregular patterns. This plot suggests to use what we cal a SARIMA model to do our forecasting.
+From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, a multiplicative seasonal patterns, and some irregular patterns. This plot suggests to use what we cal a SARIMA model to do our forecasting.
 Let's deepn our visual analysis with the decompisation of the time serie into trend, seasonality and random component. 
 
 
@@ -126,49 +126,54 @@ plot(x)
 ```
 We find the same conlusion from visual observation of time series, i.e a mainly positive linar trend over time, a seasonal patterns with some irregular patterns in the random component (variation with Time and this variance was not captured by Sesonality nor the trend)
 
+
+### 1.6 Visualization of the frequency
+Our final plot for this description part will be the visualisation of the seasonality within our time series with monthplot function. 
 ```{r}
-# Visualization of the frequency
-?monthplot
-monthplot(traffic.ts)
+monthplot(traf)
 ```
-```
+Monthplot function plots the average value obtain at each month (season). 
+We can notice tha in average, passenger trafic tends to decrease between january and fabruary then increases between march and august to decrease in the month of september and then remain stable between october and december. 
+
+This concludes our description part. Let's move to stationarity analysis and transformation. 
 
 
 ## 2. Stationarity ? 
 
-
+A stationary processes have no trend in mean, and no trend in variance and so auto-covariances do not depend on time, but only on the difference of time. 
 Let's check the auto and partial autocorrelation function (ACF and PACF) of our raw data in order to confirm  what we have observed from our first plot. 
 
 ```{r}
 acf(ts(traf, frequency=1))
 pacf(ts(traf, frequency=1))
 ```
-From the ACF, we can 
-#Logarithm transformation
-We perform a logarithmic transformation to remove the cycle amplification
+Blue : confidence internval. If the values were insdide the interval, it would mean that there anough close to zeros to be non significant. 
+From the ACF, we that values are outside the confidence interval represented by the blue lines. It means that they are all different from zero and so significant, i.e they depend on time. 
+We can have the same observation from pacf. 
+
+### 2.1 Logarithm transformation
+We perform a logarithmic transformation to remove the cycle amplification. 
 ```{r}
 ltraf <- log(traf)
-```
-CSQ: the range of the cycle has become stable
-```{r}
 plot.ts(ltraf)
 ```
+CSQ: the range of the cycle has become stable
 
-Still a presence of a trend and a seasonal component
-This trend seems to be deterministic, linear and non-stochastic (but we will use a sotchastic modelisation for the trend using integration
-within ARIMA)
-The serie is always a non-stationary series 
+Still a presence of a trend and a seasonal component. 
+This trend seems to be deterministic, linear and non-stochastic (but we will use a sotchastic modelisation for the trend using integration within ARIMA)
+
+The serie is always a non-stationary series. let's confirm it with Autocorrelograms
 ```{r}
 acf(ts(ltraf, frequency=1))
 pacf(ts(ltraf, frequency=1))
 ```
-#1st order diff: remove the trend
+### 2.2 Firt order differnce : remove the trend
 ```{r}
 dltraf_1 <- diff(ltraf, 1)
 plot(dltraf_1)
 acf(ts(dltraf_1, frequency=1))
 ```
-the trend component seems to have disappeared, not the seasonality at t=12
+The trend component seems to have disappeared, not the seasonality at t=12
 ```{r}
 pacf(ts(dltraf_1, frequency=1), lag.max = 60)
 ```
@@ -177,134 +182,145 @@ A linear regression of degree 1 seems to be sufficient.
 However, the lm1 model cannot be used to make predictions.
 Because there is still self-correction in the residuals. Let's refine the model by modeling the residuals.
 
-We will use a stochastic modelisation for the trend using integration within ARIMA
-#Now we need to look at the seasonal component 
+We will use a stochastic modelisation for the trend using integration within SARIMA
+### 2.3 A look at the seasonal component 
 
 ```{r}
 dltraf_12 <- diff(dltraf_1, 12)
 library(tseries)
-kpss.test(dltraf_12) #stationnary, we accept H0 and we choose as seasonality s=12
-
-
-#dltraf_6 <- diff(dltraf_1, 6)
-#plot(dltraf_6)
-#kpss.test(dltraf_6)
-
+kpss.test(dltraf_12)
 ```
-#now we have found a series which is stationary. We can move the identification step
+stationnary, we accept H0 and we choose as seasonality s=12.
+Now we have found a series which is stationary. We can move the identification step
+
+##3. Box-Jenkins methodology to build a SARMA process
+
+### 3.1 SARIMA model selection from ACF/PACF plots
+
+In this part, we will apply our first identification to build our SARIMA (p,d,q)(P,D,Q)[S] model
+   We will apply those rules :   
+Identifying the order of differencing:
+
+d is equal to order we have taken the difference in order to remove the trend
+Identifying the number of AR and MA terms : 
+p is equal to the first lag where the PACF value is above the significance level.
+q is equal to the first lag where the ACF value is above the significance level.
+
+Identifying the seasonal part of the model:
+S is equal to the ACF lag with the highest value (typically at a high lag).
+D is equal to the seaonality difference
+P is equal at the number of order where the PACF remain significant. 
+Q is equal at the number of order where the ACF remain significant.
+
+
 ```{r}
 plot(dltraf_12)
 par(mfrow=c(1,1))
 acf(ts(dltraf_12, frequency=1), lag.max = 40)
 pacf(ts(dltraf_12, frequency=1), lag.max = 40)
 ```
-## STEP 2 : Identification (p,d,q,P,D,Q)
 
-#first estimation 
-q=1 #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)
-p=2 #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)
-d=1 #we removed trend by taking the diff or order 1
-Q=1 #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)
-P=2 #AR because some significant coefficients in the PACF remain at order 12 & at order 24 
-D=1 #(seasonality diff) we removed seasonality diff by taking the diff or order 1
+First estimation :   
+**q=1** #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the saisonality)    
+**p=2** #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the saisonality)   
+**d=1** #we removed trend by taking the diff of order 1    
+**Q=1** #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)   
+**P=2** #AR because some significant coefficients in the PACF remain at order 12 & at order 24   
+**D=1** #(seasonality diff) we removed seasonality diff by taking the diff or order 1    
 
+### 3.2 Model building
+
+Now that we have identified our parameters, we can build our arima model. 
 ```{r}
 mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
 ```
+We have hare an Akaike Information Critera (AIC) of -685. AIC is widely used measure of a statistical model. It basically quantifies 1) the goodness of fit, and 2) the simplicity/parsimony, of the model into a single statistic which will be compared with other AIC of different model (the lower the better). 
+
+Let's fit our model with our data and plot it compared to real data (black line for real data and red line for model estimation)
 
 ```{r}
 fit1 <- fitted(mod1)
 plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 ```
+This first plot is rather reassuring as for the good identification of our parameters. The model seems to follow our actual data well. 
+However, we can observe that some parts of the model do note fit well data based on the real data for instance, at year 2009. 
 
+### 3.3 Validation of our model
+We should now pass to test the significance of our coeficient. 
+First call our coef from our model
 ```{r}
 mod1$coef
 mod1$var.coef
 ```
+
+Then compute our T-stat 
 ```{r}
 tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
 tstat  
 ```
+And then compute our p value. 
 ```{r}
 pvalue <- 2*(1-pnorm(abs(tstat)))
-pvalue 
-
-# pvalue<5% for sma1.
-# fortunately pvalue<5% for sma1. The coefficients associated to the sma1 is significant 
-# the coefficients associated to the other coefficients are not significant because pvalue>5% for them
-
-# we need to remove them, re-estimate the model without them to accurate the model
+pvalue
 ```
-###  First, we choose to remove ar1 & ar2 
+sm1 is significant (pvalue<5)
+ar1, ar2, sar1, ma1 are not sigificants in this first model (pvalue>5%)
+We will remove each by each the parameters not significants and re-estimate the model without them. 
+
+First, we choose to remove ar1 and ar2 (q=0)
 
 ```{r}
 mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
 ```
+We can notice that our AIC is slicly better than before (-685). That means that our model is 
 
-### Check p-value 2
+We check now our the p-value from this second model (pvalue2)
 
 ```{r}
 mod1$coef
 mod1$var.coef
-```
-```{r}
 tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
 tstat  
-```
-```{r}
-pvalue <- 2*(1-pnorm(abs(tstat)))
-pvalue 
-
-# pvalue<5% for sma1. The coefficients assoc
+pvalue2 <- 2*(1-pnorm(abs(tstat)))
+pvalue2
 
 ```
 
-### We remove sar1
+We have pvalue<5% for sma1 and ma1
+
+We remove sar1 and re-train our model (p=0 and P=O)
 
 ```{r}
 mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
 mod1
 ```
+Our AIC is better than before, meaning that our model fit better with our data. 
 
-### We check p-value 3
+
+We check p-value 3
 ```{r}
 mod1$coef
 mod1$var.coef
-```
-```{r}
+
 tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
 tstat  
-```
 
-```{r}
-pvalue <- 2*(1-pnorm(abs(tstat)))
-pvalue
+pvalue3 <- 2*(1-pnorm(abs(tstat)))
+pvalue3
 ```
-We check with auto arima our final coefficient. 
-The auto.arima function will provide us the best model. 
-#Test auto.arima
+All our coefficient are significant here. So we have here SARIMA (0,1,1)(0,1,1)[12] 
+
+We check with auto arima our final coefficient. The auto.arima function returns best ARIMA model according to either AIC, AICc or BIC value. The function conducts a search over possible model within the order constraints provided.
+
+Test auto.arima
 ```{r}
 auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
-mod1<- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
-mod1
-fit1 <- fitted(mod1)
-plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 ```
-```{r}
-mod1$coef
-mod1$var.coef
+We have here the same model from auto.arima ! We can pass to the residual diagnostic. 
 
-tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
-tstat 
-pvalue <- 2*(1-pnorm(abs(tstat)))
-pvalue
-```
-We have the same coef
-We follow to the residuals analysis
-
-## Residuals analysis ## 
+### 3.4 Residuals analysis 
 Difference between fit data and raw data
 every time there is a pic explain that the model has not fitted well the data
 
@@ -316,7 +332,7 @@ What we expect is that residuals are close to 0 as possible
 We want to check the white noise assumption and the normality of the residuals (gaussian WN)
 
 
-#1. White noise assumption
+#### 1. White noise assumption
 Autocorrelation of the residuals (White noise assumption) 
 ```{r}
 acf(ts(res1, frequency=1))
@@ -340,7 +356,7 @@ pvalue = 59% larger than 5% so we accept H0: white noise assumption
 CCL => We have a white noise
 
 
-#2. Normality assumption
+#### 2. Normality assumption
 
 Normality assumption
 standardized residuals (residuals divided by the standard deviation)
@@ -363,9 +379,8 @@ it corresponds to the lowest values of the residuals
 
 but, before doing that, we need to check if it is necessary by testing the normality of the residuals
 
-#######
 
-# 3. Normality assumption
+#### 3. Normality assumption
 
 
 QQ-plot
@@ -392,7 +407,7 @@ constance variance
 with a plot
 if the variance is constant, the variance should not depend on the difference of the date
 (should not depend on t)
-## 4. Homoscedaticity or heteroscedaticity here ? 
+#### 4. Homoscedaticity or heteroscedaticity here ? 
 ```{r}
 sq.res1 <- (res1)^2
 acf(ts(sq.res1,frequency=1),lag.max = 60)
@@ -403,10 +418,11 @@ Htest <- McLeod.Li.test(mod1, plot=FALSE)
 Htest
 ```
 
-### Dummy Variable
-SARIMAX 
 
-#Identify dummies
+### 3.5 - Builing a SARIMAX model : dummy variables
+ 
+
+#### Identify dummies
 
 ```{r}
 plot(res_stand) 
@@ -455,9 +471,9 @@ library(zoo)
 index(res_stand)[out1] #date of the outliers novembre 2008, Mai 2011, Mars 2014, Avril 2014 
 res_stand[out1] # value of the outlier. 
 ```
+#### Create dummies
 
-# We create the dummmies
-#We split all outliers into 4 groups to create 4 dummies 
+We split all outliers into 4 groups to create 4 dummies 
 ```{r}
 #first dummy
 Lax_data$dum_1 <- 0
@@ -479,7 +495,7 @@ Lax_data$dum_4[out4] <- 1
 
 ```
 
-
+#### Run our model
 ```{r}
 mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
               method='ML',xreg=cbind(unlist(Lax_data$dum_1), 
@@ -507,7 +523,7 @@ Plot of the fitted value...
 fit2 <- fitted(mod2)
 plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
 ```
-### Residuals analysis
+####  Residuals analysis
 
 ```{r}
 res2<- mod2$residuals
@@ -561,7 +577,7 @@ Htest
 ```
 H0 is always accepted : homoscedaticity here ! 
 
-# Step4: Prediction
+## 4 Prediction
 Quality of the fit
 ```{r}
 cb80 <- mod2$sigma2^.5*qnorm(0.9)
