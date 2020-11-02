@@ -320,9 +320,8 @@ auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
 ```
 We have here the same model from auto.arima ! We can pass to the residual diagnostic. 
 
-### 3.4 Residuals analysis 
-Difference between fit data and raw data
-every time there is a pic explain that the model has not fitted well the data
+### 3.4 Residuals analysis    
+Difference between fit data and raw data : every time there is a pic, it means  that the model has not fitted well the data
 
 ```{r}
 res1<- mod1$residuals
@@ -331,13 +330,12 @@ plot(res1)
 What we expect is that residuals are close to 0 as possible
 We want to check the white noise assumption and the normality of the residuals (gaussian WN)
 
-
 #### 1. White noise assumption
 Autocorrelation of the residuals (White noise assumption) 
 ```{r}
 acf(ts(res1, frequency=1))
 ```
-what we expect is that all the coefficients are none significant, that is the deal with white noise
+What we expect is that all the coefficients are none significant, that is the deal with white noise. 
 All coefficient seem to be none significant
 
 ```{r}
@@ -346,54 +344,47 @@ pacf(ts(res1, frequency=1),lag.max = 60)
 what i expect is that all the coefficients are none significant, that is the deal with white noise
 it is not perfect but what would be like an issue if the first or the second autocorellation coefficient 
 would have been significant
-here, 1 significant coefficient at lag 4 
+Here, 1 significant coefficient at lag 4 
 
 # Ljung-box test to check for the significance of ACF
 ```{r}
 Box.test(res1,lag=20,type="Ljung-Box")
 ```
 pvalue = 59% larger than 5% so we accept H0: white noise assumption
-CCL => We have a white noise
-
+Conclusion we have a white noise
 
 #### 2. Normality assumption
 
-Normality assumption
-standardized residuals (residuals divided by the standard deviation)
+We compute standardized residuals (residuals divided by the standard deviation)
 ```{r}
 res_stand <- res1/sqrt(mod1$sigma2)
 summary(res_stand)
 ```
-if the normality assumption is satisfied, the standardized residuals should 
-lie in between -2 and 2 (with 95% of chance)
+if the normality assumption is satisfied, the standardized residuals should  lie in between -2 and 2 (with 95% of chance)
 
 ```{r}
 plot(res_stand) 
 abline(a=2,b=0,col="red")
 abline(a=-2,b=0,col="red")
 ```
-It should be 95% of chance but here obviously there are some pics around 2007, 2009, 2011, 2014 
-(we need to add dummy variables to fit them)
-We can identify outliers in the dataset
-it corresponds to the lowest values of the residuals
+It should be 95% of chance but here obviously there are some pics around 2007, 2009, 2011, 2014.
+We can identify outliers in the dataset it corresponds to the lowest and highest values of the residuals.   
+2 options with this kind of option : 
+- Wether we decide it is a non plossible value and change this value with what happens before
+- tranform them in a dummy. 
+We will choose second option. But, before doing that, we need to check if it is necessary by testing the normality of the residuals
+s
 
-but, before doing that, we need to check if it is necessary by testing the normality of the residuals
-
-
-#### 3. Normality assumption
-
-
-QQ-plot
-#######
 ```{r}
 qqnorm(res1)
 qqline(res1)
 ```
+Here, from the qq plot we can notice that our model data does not follow qqline which follows normal distriubtion. 
+Let's confirm this observation with shapiro-wilk normality test. 
+
+Shapiro-test
 
 ```{r}
-#######
-#Shapiro-test
-#######
 shapiro.test(res1)
 library(tseries)
 jarque.bera.test(res1)
@@ -403,24 +394,32 @@ We need to add a dummy in the model (second option)
 
 
 
-constance variance
-with a plot
-if the variance is constant, the variance should not depend on the difference of the date
-(should not depend on t)
+
 #### 4. Homoscedaticity or heteroscedaticity here ? 
+Constance variance with a plot if the variance is constant, the variance should not depend on the difference of the date
+(should not depend on t)
 ```{r}
 sq.res1 <- (res1)^2
 acf(ts(sq.res1,frequency=1),lag.max = 60)
 ```
+We have an issue : 
+the first order coef of the ACF and the 22 are sigficiants. So there is a link between the value of the residuals at date t, and the square value of the residuals at date 1 and date 22 
+
+=> It may be due to the outlier we identified
+=> Or maybe we shoud add a model more complex 
+We choose to assume that it may be due to the outlier we identified below. 
+
 ```{r}
-#library(TSA)
+library(TSA)
 Htest <- McLeod.Li.test(mod1, plot=FALSE)
 Htest
 ```
-
+THe McLeod.Li test confirms our first conclusion. 
+So, we will now build a SARIMAX model which is a SARIMA model with "dummyfied" variables. 
 
 ### 3.5 - Builing a SARIMAX model : dummy variables
- 
+
+Let's identify dummies. 
 
 #### Identify dummies
 
@@ -496,6 +495,7 @@ Lax_data$dum_4[out4] <- 1
 ```
 
 #### Run our model
+For notice, in order to incoporate multiple dummies variable, we have to create a cbind matrix into xreg parameters. 
 ```{r}
 mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
               method='ML',xreg=cbind(unlist(Lax_data$dum_1), 
@@ -505,9 +505,6 @@ mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12)
                                      ))
 
 ncol(cbind(unlist(Lax_data$dum_1), unlist(Lax_data$dum_2), unlist(Lax_data$dum_3), unlist(Lax_data$dum_4)))
-
-#mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
-#              method='ML', xreg=unlist(Lax_data$dum_1))
 
 mod2
 mod2$residuals
@@ -523,13 +520,17 @@ Plot of the fitted value...
 fit2 <- fitted(mod2)
 plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
 ```
+From this plot, we can notice that our final model fits way better than better ! 
+
+Let's re-run our residuals analysis in this model. 
+
 ####  Residuals analysis
 
 ```{r}
 res2<- mod2$residuals
 plot(res2)
 ```
-# what we expect is that residuals are close to 0 as possible
+hat we expect is that residuals are close to 0 as possible
 ```{r}
 res_stand_2 <- res2/sqrt(mod2$sigma2)
 summary(res_stand_2)
@@ -560,7 +561,7 @@ Box.test(res2,lag=20,type="Ljung-Box")
 CCL => We have a gaussian white noise now. 
 
 
-#Recheck for Heteroscedasticity 
+#### Recheck for Heteroscedasticity 
 
 ```{r}
 
@@ -570,29 +571,136 @@ pacf(ts(res2, frequency=1),lag.max = 60)
 ```
 No, it seems that there is no more significant coefficients which would say that we have homoscedaticity (don't need to use garch model)
 
-# McLeod.Li.test
+#### McLeod.Li.test
 ```{r}
 Htest <- McLeod.Li.test(mod2, plot=FALSE)
 Htest
 ```
 H0 is always accepted : homoscedaticity here ! 
 
+
+
+
 ## 4 Prediction
-Quality of the fit
+
+
+Now that we have a model built, we want to use it to make forecasts. But first we should validate the model with an in-sample analysis. 
+
+### In-sample analysis
+First, let's asses the quality of the fit
 ```{r}
 cb80 <- mod2$sigma2^.5*qnorm(0.9)
 plot(cbind(ltraf,fit2-cb80,fit2+cb80),plot.type='single',lty=c(1,2,2))
 ```
 
-# Proportion of points in the confidence bound
+and the Proportion of points in the confidence bound
 ```{r}
 indi <- (ltraf-(fit2-cb80))>0&(fit2+cb80-ltraf)>0
 prop <- 100*sum(indi)/length(indi)
 prop
 ```
-Here, the prop >80%, then the fit is considered good.
+Here, the proprotion is larger than 80%, then the fit is considered good.
 
-# Prediction 
+### Out of sample analysis
+```{r}
+library(forecast)
+```
+```{r}
+train.traf <- window(traf,start=2006,end=2017)
+test.traf <- window(traf,start=2018,end=2019)
+```
+
+
+Log tranformation
+```{r}
+train.ltraf<-train.traf %>% log
+test.ltraf<-test.traf %>% log
+```
+
+Run our diffent model on train.ltraf
+```{r}
+train.mod1 <- Arima(train.ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+train.mod2 <- Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+train.mod3 <- Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
+```
+
+
+```{r}
+train.mod4 <- Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
+              method='ML',xreg=cbind(unlist(Lax_data$dum_1), 
+                                     unlist(Lax_data$dum_2),
+                                     unlist(Lax_data$dum_3),
+                                     unlist(Lax_data$dum_4)))
+```
+
+Mod1
+
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod1), col='red')
+```
+
+```{r}
+tsforecasts1 <- forecast(train.mod1)
+a1<-accuracy(tsforecasts1,test.ltraf)
+```
+
+
+
+Mod2
+
+fitted value
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod2), col='red')
+```
+
+```{r}
+tsforecasts2 <- forecast(train.mod2)
+a2<-accuracy(tsforecasts2,test.ltraf)
+a2
+```
+
+
+Mod3
+fitted value
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod3), col='red')
+```
+
+```{r}
+tsforecasts3 <- forecast(train.mod3)
+a3<-accuracy(tsforecasts3,test.ltraf)
+a3
+```
+Mod4
+fitted value
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod4), col='red')
+```
+
+```{r}
+tsforecasts4 <- forecast(train.mod4)
+a4<-accuracy(tsforecasts4,test.ltraf)
+a4
+```
+
+
+Plot accuracies
+```{r}
+a1
+a2
+a3
+a4
+```
+
+
+### Prediction 
+
+
+
 ```{r}
 ?predict
 
@@ -619,6 +727,17 @@ ts.plot(traf,2.718^pred$pred, log = "y", lty = c(1,3))
 time(traf)
 
 
+```
+## 5. Conclusion
+
+```{r}
+Summary
+
+Using data for LAX passengers we created a model (Seasonal ARIMA) to predict number of passengers one year ahead. We saw that the model fits the testing data prety well. It will be interesting to follow the real number of the passengers for upcoming months to see how well our model performs.
+
+Hope you found this kernel interesting. If so, please UPVOTE!
+
+In case of having some comments, you are always welcome...;)
 ```
 
 
