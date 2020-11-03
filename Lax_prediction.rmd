@@ -1,10 +1,9 @@
 ---
 title: "LAX_passenger_prediction_with_Box_Jenkins"
-author: "Edgar Julien, Antoine Settelen, Simon Weiss"
+author: "Edgar Jullien, Antoine Settelen, Simon Weiss"
 date: "2020-10-20"
 output:
-  html_document :
-   keep_md: true
+  html_document 
 ---
 
 # Navigation {.tabset .tabset-fade .tabset-pills}
@@ -14,9 +13,9 @@ output:
 https://www.kaggle.com/cityofLA/los-angeles-international-airport-data.   
 
 We download the data and upload it in our working github repository. 
-The dataset has on ly 3 notebook written in Python and only one notebook has implemented a prediction using SARIMA model.   
+The dataset has only 3 notebook written in Python and only one notebook has implemented a prediction using SARIMA model.   
 
-Thus, it seemed relevant to us to write this script in R by applying the Box Jenkins method in order to make predictions on this dataset using the methods seen during the Time Series and Business Data course by Anne VANHEM. 
+Thus, it seemed relevant to us to write this script in R by applying the Box Jenkins method in order to make predictions on this dataset using the methods seen during the Time Series and Business Data course by Anne VANHEMS. 
 If this script doesn't contain a lot of errors, we hope to be able to publish it on the platform. Enjoy reading! 
 
 
@@ -94,7 +93,7 @@ We verify that the data of our transformation fit well with the original data.
 sum(Lax_init[months=="janvier"&year==2006][,6])
 Lax_data[1]
 ```
-It the same ! We can pass to load our data our ts package and do our first plot.
+It is the same ! We can pass to load our data our ts package and do our first plot.
 
 ### 1.3 Load into ts model
 ```{r}
@@ -112,10 +111,12 @@ Our time series data starts at date 2006 January and ends at date 2019 mars. It'
 
 
 ### 1.4 First plot  : Passenger traffic at LAX airport
+ 
 ```{r, warning=FALSE,error=FALSE}
 plot.ts(traf,xlab="date (monthly)", ylab="passenger traffic",main="Passenger traffic at LAX airport")
 ```
-From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, a multiplicative seasonal patterns, and some irregular patterns. This plot suggests to use what we cal a SARIMA model to do our forecasting.
+   
+From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, a multiplicative seasonal patterns, and some irregular patterns. This plot suggests to use what we call a SARIMA model to do our forecasting.
 Let's deepen our visual analysis with the decomposition of the time series into trend, seasonality and random component. 
 
 
@@ -138,7 +139,7 @@ We can notice that in average, passenger traffic tends to decrease between Janua
 This concludes our description part. Let's move to stationary analysis and transformation. 
 
 
-## 2. Stationary ? 
+## 2. Stationarity ? 
 
 A stationary processes have no trend in mean, and no trend in variance and so auto-co variances do not depend on time, but only on the difference of time. 
 Let's check the auto and partial auto-correlation function (ACF and PACF) of our raw data in order to confirm  what we have observed from our first plot. 
@@ -148,7 +149,7 @@ acf(ts(traf, frequency=1))
 pacf(ts(traf, frequency=1))
 ```
 Blue : confidence interval. If the values were inside the interval, it would mean that there enough close to zeros to be non significant. 
-From the ACF, we that values are outside the confidence interval represented by the blue lines. It means that they are all different from zero and so significant, i.e they depend on time. 
+From the ACF, we can see that the values are outside the confidence interval represented by the blue lines. It means that they are all different from zero and so significant, i.e they depend on time. 
 We can have the same observation from pacf. 
 
 ### 2.1 Logarithm transformation
@@ -183,6 +184,7 @@ However, the lm1 model cannot be used to make predictions.
 Because there is still self-correction in the residuals. Let's refine the model by modeling the residuals.
 
 We will use a stochastic modelisation for the trend using integration within SARIMA
+  
 ### 2.3 A look at the seasonal component 
 
 ```{r}
@@ -190,10 +192,10 @@ dltraf_12 <- diff(dltraf_1, 12)
 library(tseries)
 kpss.test(dltraf_12)
 ```
-stationnary, we accept H0 and we choose as seasonality s=12.
+Stationnary, we accept H0 and we choose as seasonality s=12.
 Now we have found a series which is stationary. We can move the identification step
 
-##3. Box-Jenkins methodology to build a SARMA process
+## 3. Box-Jenkins methodology to build a SARIMA process
 
 ### 3.1 SARIMA model selection from ACF/PACF plots
 
@@ -207,7 +209,7 @@ p is equal to the first lag where the PACF value is above the significance level
 q is equal to the first lag where the ACF value is above the significance level.
 
 Identifying the seasonal part of the model:
-S is equal to the ACF lag with the highest value (typically at a high lag).
+S is equal to the ACF lag with the highest value (typicaly at a high lag).
 D is equal to the seasonality difference
 P is equal at the number of order where the PACF remain significant. 
 Q is equal at the number of order where the ACF remain significant.
@@ -225,7 +227,7 @@ First estimation :
 **p=2** #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the seasonality)   
 **d=1** #we removed trend by taking the diff of order 1    
 **Q=1** #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)   
-**P=2** #AR because some significant coefficients in the PACF remain at order 12 & at order 24   
+**P=2** #AR because some significant coefficients in the PACF remain at order 12 & at order 24. We will use P=1 as we got an error with P=2 using method = 'ML'
 **D=1** #(seasonality diff) we removed seasonality diff by taking the diff or order 1    
 
 ### 3.2 Model building
@@ -235,7 +237,7 @@ Now that we have identified our parameters, we can build our arima model.
 mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
 ```
-We have hare an Akaike Information Criteria (AIC) of -685. AIC is widely used measure of a statistical model. It basically quantifies 1) the goodness of fit, and 2) the simplicity/parsimony, of the model into a single statistic which will be compared with other AIC of different model (the lower the better). 
+We have here an Akaike Information Criteria (AIC) of -685. AIC is widely used measure of a statistical model. It basically quantifies 1) the goodness of fit, and 2) the simplicity/parsimony, of the model into a single statistic which will be compared with other AIC of different model (the lower the better). 
 
 Let's fit our model with our data and plot it compared to real data (black line for real data and red line for model estimation)
 
@@ -244,7 +246,7 @@ fit1 <- fitted(mod1)
 plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
 ```
 This first plot is rather reassuring as for the good identification of our parameters. The model seems to follow our actual data well. 
-However, we can observe that some parts of the model do note fit well data based on the real data for instance, at year 2009. 
+However, we can observe that some parts of the model do not fit well data based on the real data for instance, at year 2009. 
 
 ### 3.3 Validation of our model
 We should now pass to test the significance of our coefficient. 
@@ -264,7 +266,7 @@ And then compute our p value.
 pvalue <- 2*(1-pnorm(abs(tstat)))
 pvalue
 ```
-sm1 is significant (pvalue<5)
+sma1 is significant (pvalue<5)
 ar1, ar2, sar1, ma1 are not significant in this first model (pvalue>5%)
 We will remove each by each the parameters not significant and re-estimate the model without them. 
 
@@ -274,7 +276,7 @@ First, we choose to remove ar1 and ar2 (q=0)
 mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
 mod1
 ```
-We can notice that our AIC is slightly better than before (-685). That means that our model is 
+We can notice that our AIC is slightly better than before (which was -685). That means that our model is fitting better with our data.  
 
 We check now our the p-value from this second model (pvalue2)
 
@@ -312,7 +314,7 @@ pvalue3
 ```
 All our coefficient are significant here. So we have here SARIMA (0,1,1)(0,1,1)[12] 
 
-We check with auto arima our final coefficient. The auto.arima function returns best ARIMA model according to either AIC, AICc or BIC value. The function conducts a search over possible model within the order constraints provided.
+We check with auto arima our final coefficient. The auto.arima function returns best ARIMA model according to either AIC, AICc or BIC value, default value is AIC. The function conducts a search over possible model within the order constraints provided.
 
 Test auto.arima
 ```{r}
@@ -369,9 +371,9 @@ abline(a=-2,b=0,col="red")
 ```
 It should be 95% of chance but here obviously there are some pics around 2007, 2009, 2011, 2014.
 We can identify outliers in the dataset it corresponds to the lowest and highest values of the residuals.   
-2 options with this kind of option : 
-- Whether we decide it is a non possible value and change this value with what happens before
-- transform them in a dummy. 
+2 options with this kind of situation : 
+1. Whether we decide it is a non possible value and change this value with what happens before   
+2. transform them in a dummy. 
 We will choose second option. But, before doing that, we need to check if it is necessary by testing the normality of the residuals
 s
 
@@ -389,7 +391,7 @@ shapiro.test(res1)
 library(tseries)
 jarque.bera.test(res1)
 ```
-pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal)
+pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal). 
 We need to add a dummy in the model (second option)
 
 
@@ -587,7 +589,7 @@ H0 is always accepted : homoscedaticity here !
 Now that we have a model built, we want to use it to make forecasts. But first we should validate the model with an in-sample analysis. 
 
 ### In-sample analysis
-First, let's asses the quality of the fit
+First, let's assess the quality of the fit
 ```{r}
 cb80 <- mod2$sigma2^.5*qnorm(0.9)
 plot(cbind(ltraf,fit2-cb80,fit2+cb80),plot.type='single',lty=c(1,2,2))
@@ -631,7 +633,7 @@ train.mod2 <- forecast::Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(
 train.mod3 <- forecast::Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
 ```
 
-Since we are onloy interresed here in accuracy, we will not use SARIMAx and dummy variable. But we keep in mind that SARIMAX 
+Since we are only interresed here in accuracy, we will not use SARIMAx and dummy variable. But we keep in mind that SARIMAX 
 had better AIC. 
 
 Let's plot the fitted value compared to raw data...
