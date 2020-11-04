@@ -4,6 +4,7 @@ Time Series project
 --
 
 Kaggle notebook : https://www.kaggle.com/w13w13/lax-passenger-prediction-with-box-jenkins
+Presentation link : https://13w13.github.io/U1_Time_Series_LAX_passenger_forecast_with_Box_Jenkins-/#1
 
 **Objectives**: Apply Box-Jenkins methodology to forecast airport traffic time
 series.  
