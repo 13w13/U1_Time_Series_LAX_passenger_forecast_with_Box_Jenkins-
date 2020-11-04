@@ -1,0 +1,992 @@
+---
+title       : Los Angeles airport passenger prediction with Box Jenkins
+subtitle    : Time Series and Business Data course by Anne VANHEMS
+author: "Edgar Jullien, Antoine Settelen, Simon Weiss"
+date: "03/11/2020"
+output: ioslides_presentation
+---
+<style>
+pre {
+    line-height: 1.2em;
+    font-size: 12px;
+}
+</style>
+
+## Overview 
+
+0. Presentation of the project 
+1. Description of the time series and data preparation
+2. Stationarity analysis
+3. Box-Jenkins methodology to build a SARIMA process
+4. Prediction
+5. Conclusion
+
+## Presentation of the project 
+
+- **Data** : For this project, we used a dataset hosted by the city of Los Angeles. 
+ 
+- The organization has an open data platform and they update their information according the amount of data that is brought in. We found the dataset trough an open dataset in [Kaggle website](https://www.kaggle.com/cityofLA/los-angeles-international-airport-data). We download the data and upload it in our working github repository.  The dataset has only 3 notebooks written in Python and only one notebook has implemented a prediction using SARIMA model.   
+
+- Thus, it seemed relevant to us to write this script in R by applying the Box Jenkins method in order to make predictions on this dataset using the methods seen during the Time Series and Business Data course by Anne VANHEMS. 
+If this script doesn't contain a lot of errors, we hope to be able to publish it on the platform. 
+
+## Lax Airport
+
+![Lax Airport](https://aecom.com/ie/wp-content/uploads/2013/12/AECOM2.18.14-160_ES.tif-797x531.jpg)
+
+
+
+## Outline  : 
+- After loading the data, we are going to analyze the data, visualize our data to understand it better. (Chapter 1) 
+> - Then, we will focus on the stationary analysis by including graphs and tables to justify our analysis. We will transform the data in order to reach stationary.(Chapter 2)
+- The stationary reached, we will then apply Box-Jenkins methodology to build an ARMA process on the modified data and select the best model (Chapter 3). 
+-After that, we will focus validate the model with an in-sample and out of sample analysis and do prediction to predict the number of passengers for future dates (Chapter 4)
+
+
+## 1. Description of the time series and data preparation
+### 1.1 Load the data
+
+```{r echo = F, warining = F, results = 'hide',message = F}
+library(magrittr)
+library(data.table)
+library(forecast)
+library(tseries)
+library(TSA)
+```
+
+- As mentioned below, we load the data from our github repository ... 
+```{r warning=FALSE}
+Lax_init <- read.csv("data/los-angeles-international-airport-passenger-traffic-by-terminal.csv")
+Lax_init %>% head(n=3)
+```
+
+## 
+
+```{r warning=FALSE}
+Lax_init %>% str
+```
+
+
+The row data we have loaded contains 5870 observation for the 8 following features:   
+- DataExtractDate	
+- ReportPeriod	
+- Terminal	
+- Arrival_Departure	
+- Domestic_International	
+- Passenger_Count
+- year and month
+
+
+  - We check if there is null value
+
+```{r warning=FALSE, collapse=TRUE}
+Lax_init %>% anyNA
+```
+We don't have NA value. 
+
+
+## 1.2 Data preparation
+
+- In order to use ts package in R, we have to do some Data preparation.   
+- Since we want to predict the **number of passenger** with our model, we will only keep the feature **Passenger Count** and **Report Period** associated to each observation.   
+
+- So first we convert the Report Perdiod feature into a Date type. 
+```{r}
+Lax_init[,2]<-Lax_init[,2] %>% as.Date()
+```
+- Then we create 2 new column for the year and the month from this Report Period and convert the initial dataset into a Data table. 
+```{r}
+Lax_init$year<-as.numeric(format(Lax_init[,2],'%Y'))
+Lax_init$months<-months(Lax_init[,2])
+Lax_init %>% setDT
+```
+
+## 
+
+-We create a new Lax dataset with only the data we are interested in for the prediction. 
+```{r}
+Lax_data=Lax_init[, lapply(.SD, sum, na.rm=TRUE), by=list(year,months),.SDcols=c("Passenger_Count")]
+```
+
+
+- We verify that the data of our transformation fit well with the original data.
+
+```{r}
+sum(Lax_init[months=="janvier"&year==2006][,6])
+Lax_data[1]
+```
+It is the same ! We can pass to load our data our ts package and do our first plot.
+
+
+## 1.3 Load into ts model
+```{r}
+traf <- ts(Lax_data[,3], start=c(2006,1), frequency=12)
+str(traf)
+```
+> - Our time series data starts at date 2006 January and ends at date 2019 mars. It's frequency is monthly. 
+
+
+## 1.4 First plot  : Passenger traffic at LAX airport {.smaller}
+
+<font size="3">
+From this first plot, we can first notice that this time series has for the most part of it a **positive linear trend**, a **multiplicative seasonal patterns**, and  **some irregular patterns**. This plot suggests to use what we cal a SARIMA model to do our forecasting.</font>
+
+```{r echo = F, warining = F, message = F}
+plot.ts(traf,xlab="date (monthly)", ylab="passenger traffic",main="Passenger traffic at LAX airport")
+```
+
+
+
+## 1. 5 Decomposition in trend, seasonality and random component
+<font size="3">
+We find the same conclusion from visual observation of time series : i.e a mainly positive linar trend over time, a seasonal patterns with some irregular patterns in the random component. </font>
+
+```{r echo = F, warining = F, message = F}
+x <- decompose(traf)
+plot(x)
+```
+
+
+## 1.6 Visualization of the frequency
+- Our final plot for this description part will be the visualization of the seasonality within our time series with month plot function. Monthplot function plots the average value obtain at each month (season). 
+
+```{r echo = F, warining = F, message = F}
+monthplot(traf)
+```
+
+--- 
+
+<font size="3">
+We can notice that in average, passenger traffic tends to decrease between January and February then increases between march and august to decrease in the month of September and then remain stable between October and December.    
+
+This concludes our description part. Let's move to stationary analysis and transformation. </font>
+
+```{r echo = F, warining = F, message = F}
+monthplot(traf)
+```
+
+
+## 2. Stationary ? 
+- A **stationary** process have no trend **in mean**, and no **trend in variance** and so auto-covariances **do not depend on time**, but only on the **difference of time**. 
+- Let's check the auto and partial auto-correlation function (ACF and PACF) of our raw data in order to confirm  what we have observed from our first plot. 
+
+
+--- 
+
+
+<font size="3">
+- Blue : confidence interval. If the values were inside the interval, it would mean that there enough close to zeros to be non significant.    
+- From the ACF, we see that values are outside the confidence interval represented by the blue lines. It means that they are all different from zero and so significant, i.e they depend on time. We can have the same observation from pacf. </font>
+
+```{r}
+acf(ts(traf, frequency=1))
+```
+
+
+--- 
+
+ 
+
+```{r}
+pacf(ts(traf, frequency=1))
+```
+
+## 2.1 Logarithm transformation
+<font size="3">We perform a logarithmic transformation to remove the cycle amplification. The range cycle has become stable</font>
+
+```{r}
+ltraf <- log(traf)
+plot.ts(ltraf)
+```
+
+
+---
+
+There is still the presence of a trend and a seasonal component. 
+This trend seems to be deterministic, linear and non-stochastic (but we will use a stochastic modelisation for the trend using integration within ARIMA)
+
+The serie is always a non-stationary series. let's confirm it with Autocorrelograms
+
+---
+
+```{r}
+acf(ts(ltraf, frequency=1))
+```
+
+---
+
+```{r}
+pacf(ts(ltraf, frequency=1))
+```
+
+
+
+## 2.2 First order difference : remove the trend
+```{r}
+dltraf_1 <- diff(ltraf, 1)
+plot(dltraf_1)
+```
+
+---
+
+The trend component seems to have disappeared, not the seasonality at t=12
+
+```{r}
+acf(ts(dltraf_1, frequency=1))
+```
+
+---
+
+
+<font size="3">A linear regression of degree 1 seems to be sufficient.
+However, the lm1 model cannot be used to make predictions.
+Because there is still self-correction in the residuals. Let's refine the model by modeling the residuals.
+
+We will use a stochastic modelisation for the trend using integration within **SARIMA**</font>
+
+```{r}
+pacf(ts(dltraf_1, frequency=1), lag.max = 60)
+```
+
+
+## 2.3 A look at the seasonal component 
+
+```{r}
+dltraf_12 <- diff(dltraf_1, 12)
+library(tseries)
+kpss.test(dltraf_12)
+```
+stationnary, we accept H0 and we choose as seasonality s=12.
+Now we have found a series which is stationary. We can move the identification step
+
+## 3. Box-Jenkins methodology to build a SARIMA process
+### 3.1 SARIMA model selection from ACF/PACF plots
+
+<font size="3">In this part, we will apply our first identification to build our SARIMA (p,d,q)(P,D,Q)[S] model
+
+   We will apply those rules :   
+Identifying the order of difference:
+
+  - **d** is equal to order we have taken the difference in order to remove the trend
+Identifying the number of AR and MA terms : 
+  - **p** is equal to the first lag where the PACF value is above the significance level.
+  - **q** is equal to the first lag where the ACF value is above the significance level.
+
+Identifying the seasonal part of the model:
+
+  - **S** is equal to the ACF lag with the highest value (typicaly at a high lag).
+  - **D** is equal to the seasonality difference
+  - **P** is equal at the number of order where the PACF remain significant. 
+  - **Q** is equal at the number of order where the ACF remain significant.</font>
+
+---
+
+
+```{r}
+plot(dltraf_12)
+```
+
+---
+
+```{r}
+acf(ts(dltraf_12, frequency=1), lag.max = 40)
+```
+
+---
+
+```{r}
+pacf(ts(dltraf_12, frequency=1), lag.max = 40)
+```
+
+---
+
+First estimation :    
+  
+  - **q=1** #MA because for k>(q=1), acf(ts) = 0 (taking ac count of the seasonality) 
+    
+  - **p=2** #AR because for k>(q=2), pacf(ts) = 0 (taking ac count of the seasonality) 
+    
+  - **d=1** #we removed trend by taking the diff of order 1    
+    
+  - **Q=1** #MA because some significant coefficients in the ACF remain at order 12 (but not at order 24)   
+    
+  - **P=2** #AR because some significant coefficients in the PACF remain at order 12 & at order 24   
+  - **D=1** #(seasonality diff) we removed seasonality diff by taking the diff or order 1    
+
+
+
+## 3.2 Model building
+
+<font size="3">Now that we have identified our parameters, we can build our arima model. 
+We use P=1 as we got an error with P=2 using method = 'ML'. </font>
+```{r}
+mod1 <- arima(ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+mod1
+```
+
+
+<font size="3">We have an Akaike Information Criteria (AIC) of -685. AIC is widely used measure of a statistical model. It basically quantifies 1) the goodness of fit, and 2) the simplicity/parsimony, of the model into a single statistic which will be compared with other AIC of different model (the lower the better). </font>
+
+<font size="3">Let's fit our model with our data and plot it compared to real data (black line for real data and red line for model estimation)</font>
+
+
+---
+
+<font size="2">This first plot is rather reassuring as for the good identification of our parameters. The model seems to follow our actual data well. 
+However, we can observe that some parts of the model do not fit well data based on the real data for instance, at year 2009. </font>
+
+```{r warining = F, message = F}
+fit1 <- fitted(mod1)
+plot.ts(cbind(ltraf,fit1),plot.type='single',col=c('black','red'))
+```
+
+
+## 3.3 Validation of our model
+We should now pass to test the significance of our coefficient. 
+First call our coef from our model
+```{r}
+mod1$coef
+mod1$var.coef
+```
+
+---
+
+Then compute our T-stat 
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+tstat  
+```
+And then compute our p value. 
+```{r}
+pvalue <- 2*(1-pnorm(abs(tstat)))
+pvalue
+```
+sma1 is significant (pvalue<5)
+ar1, ar2, sar1, ma1 are not significant in this first model (pvalue>5%)
+We will remove each by each the parameters not significant and re-estimate the model without them. 
+
+---
+
+First, we choose to remove ar1 and ar2 (q=0)
+
+```{r}
+mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+mod1
+```
+We can notice that our AIC is slightly better than before (which was -685). That means that our model is fitting better with the data. 
+
+We check now our the p-value from this second model (pvalue2)
+
+
+
+---
+
+```{r}
+mod1$coef
+mod1$var.coef
+```
+
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+pvalue2 <- 2*(1-pnorm(abs(tstat)))
+pvalue2
+
+```
+
+<font size="3">We have pvalue<5% for sma1 and ma1
+We remove sar1 and re-train our model (p=0 and P=O)</font>
+
+
+---
+```{r}
+mod1 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
+mod1
+```
+Our AIC is better than before, meaning that our model fit better with our data. 
+
+
+
+---
+
+We check p-value 3
+```{r}
+mod1$coef
+mod1$var.coef
+```
+
+```{r}
+tstat <- mod1$coef/sqrt(diag(mod1$var.coef))
+
+pvalue3 <- 2*(1-pnorm(abs(tstat)))
+pvalue3
+```
+<font size="3">All our coefficient are significant here. So we have here SARIMA (0,1,1)(0,1,1)[12]</font>
+
+
+
+---
+
+Test auto.arima    
+  
+- We check with auto arima our final coefficient. The auto.arima function returns best ARIMA model according to either AIC, AICc or BIC value (default value is AIC). 
+  The function conducts a search over possible model within the order constraints provided.
+  
+- Conclusion from auto.arima : We have here the same model from auto.arima ! We can pass to the residual diagnostic.
+
+
+---
+
+```{r}
+auto.arima(ltraf,stationary =FALSE, seasonal = TRUE,trace=TRUE)
+```
+
+
+## 3.4 Residuals analysis    
+<font size="3">Difference between fit data and raw data : every time there is a pic, it means that the model has not fitted well the data.</font> 
+
+```{r}
+res1<- mod1$residuals
+```
+
+<font size="4">What we expect is that residuals are close to 0 as possible
+We want to check the white noise assumption and the normality of the residuals (Gaussian WN)</font>
+
+---
+
+```{r}
+plot(res1)
+```
+
+
+
+## 1. White noise assumption
+
+<font size="4">Autocorrelation of the residuals (White noise assumption). What we expect is that all the coefficients are none significant, that is the deal with white noise. All coefficient seem to be none significant</font>
+
+
+```{r}
+acf(ts(res1, frequency=1))
+```
+
+<font size="4">What we expect is that all the coefficients are non significant, that is the deal with white noise
+it is not perfect but what would be like an issue if the first or the second autocorellation coefficient 
+would have been significant. Here, 1 significant coefficient at lag 4 </font>
+
+
+---
+
+Same results for pacf. 
+
+```{r}
+pacf(ts(res1, frequency=1),lag.max = 60)
+```
+
+---
+
+Ljung-box test to check for the significance of ACF
+```{r}
+Box.test(res1,lag=20,type="Ljung-Box")
+```
+
+pvalue = 59% larger than 5% so we accept H0: white noise assumption.    
+Conclusion : **we have a white noise**. 
+
+
+## 2. Normality assumption
+
+We compute standardized residuals (residuals divided by the standard deviation)
+```{r}
+res_stand <- res1/sqrt(mod1$sigma2)
+summary(res_stand)
+```
+if the normality assumption is satisfied, the standardized residuals should  lie in between -2 and 2 (with 95% of chance)
+
+---
+
+<font size="4">It should be 95% of chance but here obviously there are some pics around 2007, 2009, 2011, 2014.
+We can identify outliers in the dataset it corresponds to the lowest and highest values of the residuals.</font>  
+
+
+```{r}
+plot(res_stand) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+```
+
+---
+
+2 options with this kind of situation : 
+
+1. Whether we decide it is a non possible value and change this value with what happens before
+2. Transform them in dummies.    
+
+We will choose second option. But, before doing that, we need to check if it is necessary by testing the normality of the residuals. 
+
+---
+
+Here, from the qq plot we can notice that our model data does not follow qqline which follows normal distribution. 
+Let's confirm this observation with Shapiro-wilk normality test. 
+```{r}
+qqnorm(res1)
+qqline(res1)
+```
+
+---
+
+Shapiro-test
+
+```{r}
+shapiro.test(res1)
+```
+
+
+```{r echo = F, warining = F, results = 'hide',message = F}
+library(tseries)
+```
+
+
+```{r}
+jarque.bera.test(res1)
+```
+pvalue <<<< 5%, we reject normality (H0 : normal, H1 non normal). 
+We need to add a dummy in the model (second option)
+
+
+## 4. Homoscedaticity or heteroscedaticity here ? 
+Constance variance with a plot if the variance is constant, the variance should not depend on the difference of the date
+(should not depend on t)
+
+---
+
+
+
+```{r}
+sq.res1 <- (res1)^2
+acf(ts(sq.res1,frequency=1),lag.max = 60)
+```
+
+---
+
+We have an issue : 
+the first order coef of the ACF and the 22 are significant. So there is a link between the value of the residuals at date t, and the square value of the residuals at date 1 and date 22 
+
+=> It may be due to the outlier we identified    
+=> Or maybe we should add a model more complex.   
+We choose to assume that it may be due to the outlier we identified below. 
+
+---
+
+```{r}
+library(TSA)
+Htest <- McLeod.Li.test(mod1, plot=FALSE)
+Htest
+```
+The McLeod.Li test confirms our first conclusion.    
+   
+So, we will now build a SARIMAX model which is a SARIMA model with "dummyfied" variables. 
+
+
+## 3.5 - Building a SARIMAX model : dummy variables
+
+###  Identify dummies
+
+<font size="4">We can identify outliers in our dataset  
+- 2009 : 1 min , 2011 : 1 max , 2014 : 1 min and max</font>
+
+---
+
+
+
+```{r}
+plot(res_stand) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+```
+
+---
+
+```{r}
+min(res_stand)
+max(res_stand)
+```
+We decide to cut at [-3,3]
+
+
+```{r}
+out <- which(res_stand < -3 | res_stand > 3)
+out
+```
+
+---
+
+```{r}
+#split all outliers into 4 groups to create 4 dummies 
+
+out1 <- out[1]
+out1
+
+out2 <- out[2]
+out2
+
+out3 <- out[3]
+out3
+
+out4 <- out[4]
+out4
+
+
+```
+
+---
+
+
+It corresponds to the observations 35, 65, 100,11 
+
+
+With the zoo package we associate with this observation the date. 
+```{r}
+library(zoo)
+```
+
+
+```{r}
+index(res_stand)[out1] #date of the outliers novembre 2008, Mai 2011, Mars 2014, Avril 2014 
+res_stand[out1] # value of the outlier. 
+```
+
+---
+
+### Create dummies
+
+We split all outliers into 4 groups to create 4 dummies 
+```{r}
+#first dummy
+Lax_data$dum_1 <- 0
+Lax_data$dum_1[out1] <- 1
+
+length(Lax_data$dum_1)
+#second dummy
+Lax_data$dum_2 <- 0
+Lax_data$dum_2[out2] <- 1
+
+#third dummy
+Lax_data$dum_3 <- 0
+Lax_data$dum_3[out3] <- 1
+
+#fourth dummy
+Lax_data$dum_4 <- 0
+Lax_data$dum_4[out4] <- 1
+
+```
+
+---
+
+### Run our model
+For notice, in order to incorporate multiple dummies variable, we had to create a cbind matrix into xreg parameters. 
+```{r}
+mod2 <- arima(ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), 
+              method='ML',xreg=cbind(unlist(Lax_data$dum_1), 
+                                     unlist(Lax_data$dum_2),
+                                     unlist(Lax_data$dum_3),
+                                     unlist(Lax_data$dum_4)
+                                     ))
+
+ncol(cbind(unlist(Lax_data$dum_1), unlist(Lax_data$dum_2), unlist(Lax_data$dum_3), unlist(Lax_data$dum_4)))
+```
+
+---
+
+
+```{r}
+mod2
+```
+
+xreg : additional variable I want to take into account
+
+By adding xreg, we will be able to control the misfit at the years written below. We have even gain small AIC ! 
+
+---
+
+Plot of the fitted value...From this plot, we can notice that our final model fits way better than better ! 
+
+Let's re-run our residuals analysis in this model. 
+```{r}
+fit2 <- fitted(mod2)
+plot.ts(cbind(ltraf,fit2),plot.type='single',col=c('black','red'))
+```
+
+
+
+## Residuals analysis
+
+What we expect is that residuals are close to 0 as possible
+
+```{r}
+res2<- mod2$residuals
+plot(res2)
+```
+
+---
+
+```{r}
+res_stand_2 <- res2/sqrt(mod2$sigma2)
+summary(res_stand_2)
+
+```
+
+---
+
+```{r}
+plot(res_stand_2) 
+abline(a=2,b=0,col="red")
+abline(a=-2,b=0,col="red")
+```
+
+---
+
+```{r}
+qqnorm(res2)
+qqline(res2)
+```
+
+---
+
+With our dummies, now the residuals follow a normal distribution.
+Is it always a white noise ? 
+```{r}
+shapiro.test(res2)
+jarque.bera.test(res2)
+```
+
+---
+
+```{r}
+# Ljung-box test to check for the significance of ACF
+Box.test(res2,lag=20,type="Ljung-Box")
+#pvalue = 59% larger than 5% so we accept H0: white noise assumption
+```
+
+Conclusion => We have a Gaussian white noise now. 
+
+
+## Recheck for Heteroscedasticity 
+
+```{r}
+acf(ts(res2, frequency=1))
+```
+
+---
+
+No, it seems that there is no more significant coefficients which would say that we have homoscedaticity (don't need to use garch model)
+
+```{r}
+pacf(ts(res2, frequency=1),lag.max = 60)
+
+```
+
+
+---
+
+### McLeod.Li.test
+```{r}
+Htest <- McLeod.Li.test(mod2, plot=FALSE)
+Htest
+```
+H0 is always accepted : homoscedaticity here ! 
+
+
+
+## 4. Prediction
+
+
+Now that we have a model built, we want to use it to make forecasts. But first we should validate the model with an in-sample analysis. 
+
+### In-sample analysis
+First, let's assess the quality of the fit
+
+---
+
+```{r}
+cb80 <- mod2$sigma2^.5*qnorm(0.9)
+plot(cbind(ltraf,fit2-cb80,fit2+cb80),plot.type='single',lty=c(1,2,2))
+```
+
+---
+
+and the Proportion of points in the confidence bound
+```{r}
+indi <- (ltraf-(fit2-cb80))>0&(fit2+cb80-ltraf)>0
+prop <- 100*sum(indi)/length(indi)
+prop
+```
+Here, the proportion is larger than 80%, then the fit is considered good.
+
+---
+
+### Out of sample analysis
+
+Let's confirm our model with an out-of-sample analysis.   
+In order to do that, we will split our Lax data into two samples : one train dataset and a test dataset. 
+   
+We will re-run our model on train datasets, forecast results and use accuracy analysis which will compare forecast results and test dataset in order to identify the best accuracy of model. 
+We will use the forecast library to forecast models.   
+```{r}
+library(forecast)
+```
+
+---
+
+Split train and test lax dataset. 
+```{r}
+train.traf <- window(traf,start=2006,end=2017)
+test.traf <- window(traf,start=2018,end=2019)
+```
+
+
+Log transformation
+```{r}
+train.ltraf<-train.traf %>% log
+test.ltraf<-test.traf %>% log
+```
+
+Run our different models on train.ltraf
+```{r}
+train.mod1 <- forecast::Arima(train.ltraf, c(2, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+train.mod2 <- forecast::Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(1, 1, 1), period = 12), method='ML')
+train.mod3 <- forecast::Arima(train.ltraf, c(0, 1, 1),seasonal = list(order = c(0, 1, 1), period = 12), method='ML')
+```
+
+Since we are only interresed here in accuracy, we will not use SARIMAX and dummy variable. But we keep in mind that SARIMAX 
+had better AIC. 
+
+---
+
+Let's plot the fitted value compared to raw data...
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod1), col='red')
+```
+
+---
+
+...and do our first forecast with train dataset.   
+We can now plot accuracy of our mod1 by comparing forecast results and test dataset. 
+```{r}
+tsforecasts1 <- forecast(train.mod1)
+```
+
+```{r}
+a1<-accuracy(tsforecasts1,test.ltraf)
+a1
+```
+
+---
+
+Mod2
+
+fitted value
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod2), col='red')
+```
+
+---
+
+Forecast and accuracy
+```{r}
+tsforecasts2 <- forecast(train.mod2)
+a2<-accuracy(tsforecasts2,test.ltraf)
+a2
+```
+We can notice that mod2 has poorer performance metric as it gained 0,01 point from previous model. 
+
+---
+
+Mod3
+fitted value
+```{r}
+plot(train.ltraf)
+lines(fitted(train.mod3), col='red')
+```
+
+---
+
+
+
+```{r}
+tsforecasts3 <- forecast(train.mod3)
+a3<-accuracy(tsforecasts3,test.ltraf)
+a3
+```
+
+---
+
+
+Let's use performance metrics **Root Mean Squared Error and Mean Absolute Error**. 
+  The closer to Zero those 2 metrics are, the better.  We can notice that first, all our model have good performance metrics, they are enough close to zero to best called as good model.      
+  
+ What we can notice here is that we have an opposition between AIC conclusion on performance of model and performance metrics conclusion.   
+  
+  Indeed, we can notice that our RMSE and MAE are slightly increasing as we passed to mod1 to mod3, i.e, mod3 are doing less good than mod1. The explanation of this fact remains open.    
+Nonetheless, we choose to keep SARIMAX mod4 as our best model by choosing AIC our unique information criteria.   
+
+Let's finally pass to our prediction part.
+
+
+## Prediction 
+
+
+First, we need to supply new values of our regression. Newxreg should indeed be a matrix that contains values of the regressors we want to predict. 
+
+```{r}
+trick <- matrix(rep(0, 12), ncol=4)
+
+length(trick)
+```
+
+
+
+```{r}
+mod2
+```
+
+
+---
+
+```{r}
+pred <- predict(mod2, n.ahead = 12, newxreg = trick)
+```
+
+
+
+Let's plot our forecast. 
+
+```{r}
+ts.plot(traf,2.718^pred$pred, log = "y", lty = c(1,3))
+```
+
+---
+
+We plot just from 2010. 
+
+```{r}
+ts.plot(traf,xlim=c(2010,2020.500))
+lines(2.718^(pred$pred), col="red")
+lines(2.718^(pred$pred-1.96*pred$se),col=4,lty=2)
+lines(2.718^(pred$pred+1.96*pred$se),col=4,lty=2)
+```
+
+
+## 5. Conclusion
+
+Using data for LAX passengers we built a **SARIMA** and **SARIMAX** model
+to predict number of passengers one year ahead.   
+We saw that the model  suits the testing data pretty well.
+To see how well our model does, it will be fascinating
+to track the real number of passengers for the next few months.      
+Nonetheless, the model doesn't take into account external events such as Covid-19 outbreak which dramatically changed the airports traffic. 
+
+
+
+
+
