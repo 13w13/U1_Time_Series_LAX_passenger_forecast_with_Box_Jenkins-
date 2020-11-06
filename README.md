@@ -1,3 +1,4 @@
+![ViewCount](https://views.whatilearened.today/views/github/13w13/U1_Time_Series_LAX_passenger_forecast_with_Box_Jenkins-.svg?cache=remove)
 # U1_Time_Series_LAX_passenger_prediction_with_Box_Jenkins-
 
 Time Series project
